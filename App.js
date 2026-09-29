@@ -363,15 +363,12 @@ function MainScreen() {
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     const onBackPress = () => {
-      if (webViewRef.current && canGoBack) {
-        webViewRef.current.goBack();
-        return true;
-      }
-      return false;
+      handleGoBack();
+      return true;
     };
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
-  }, [canGoBack]);
+  }, [canGoBack, activeTab]);
 
   const onMessage = (event) => {
     try {
@@ -383,17 +380,37 @@ function MainScreen() {
   };
 
   const handleGoBack = () => {
-    if (webViewRef.current && canGoBack) {
+    if (!webViewRef.current) return;
+    webViewRef.current.injectJavaScript(`
+      (function() {
+        // 1. Look for Instagram's in-page back button (e.g. back chevron in header)
+        const igBack = document.querySelector('svg[aria-label*="Back" i], button[aria-label*="Back" i], a[aria-label*="Back" i], header button, header svg')?.closest('button, a, div[role="button"]');
+        if (igBack) {
+          igBack.click();
+          return;
+        }
+        // 2. Fall back to window.history.back
+        if (window.history.length > 1) {
+          window.history.back();
+        } else {
+          window.location.href = 'https://www.instagram.com/direct/inbox/';
+        }
+      })();
+      true;
+    `);
+    if (canGoBack && webViewRef.current) {
       webViewRef.current.goBack();
-    } else {
-      handleTabPress('messages');
     }
   };
 
   const handleReload = () => {
-    if (webViewRef.current) {
-      webViewRef.current.reload();
-    }
+    if (!webViewRef.current) return;
+    webViewRef.current.injectJavaScript(`
+      window.__ACTIVITY_TRIGGERED__ = false;
+      window.location.reload();
+      true;
+    `);
+    webViewRef.current.reload();
   };
 
   const handleTabPress = (tab) => {
@@ -481,17 +498,19 @@ function MainScreen() {
         <View style={styles.headerActions}>
           <TouchableOpacity 
             style={styles.headerBtn} 
+            activeOpacity={0.6}
             delayPressIn={0} 
             onPress={handleGoBack}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
             <Text style={styles.headerBtnText}>◀</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.headerBtn} 
+            activeOpacity={0.6}
             delayPressIn={0} 
             onPress={handleReload}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
             <Text style={styles.headerBtnText}>↻</Text>
           </TouchableOpacity>
@@ -623,18 +642,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#1c1c1e',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#2c2c2e',
+    borderColor: '#38383a',
   },
   headerBtnText: {
     color: '#ffffff',
-    fontSize: 13,
+    fontSize: 15,
+    fontWeight: '700',
   },
   webview: {
     flex: 1,

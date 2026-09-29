@@ -1,6 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
-  SafeAreaView,
   StyleSheet,
   StatusBar,
   View,
@@ -13,6 +12,7 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 // Injected JavaScript Engine for Anchor
@@ -254,6 +254,23 @@ true;
 `;
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AnchorApp />
+    </SafeAreaProvider>
+  );
+}
+
+function AnchorApp() {
+  const insets = useSafeAreaInsets();
+  // Safe top padding that accounts for Android status bar (including notch / hole punch) or iOS notch
+  const safeTop = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 0
+  );
+  // Safe bottom padding for Android gesture bar and iOS home indicator
+  const safeBottom = Math.max(insets.bottom, Platform.OS === 'ios' ? 14 : 8);
+
   const webViewRef = useRef(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [activeTab, setActiveTab] = useState('messages'); // 'notifications' | 'messages' | 'profile' | 'settings'
@@ -410,8 +427,8 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar backgroundColor="#000000" barStyle="light-content" />
+    <View style={[styles.rootContainer, { paddingTop: safeTop }]}>
+      <StatusBar backgroundColor="#000000" barStyle="light-content" translucent={true} />
 
       {/* Header Bar */}
       <View style={styles.header}>
@@ -658,7 +675,7 @@ export default function App() {
       </View>
 
       {/* Fixed 4-Tab Bottom Navigation Bar */}
-      <View style={styles.bottomNav}>
+      <View style={[styles.bottomNav, { paddingBottom: safeBottom }]}>
         {/* Tab 1: Notifications */}
         <TouchableOpacity
           style={styles.navItem}
@@ -716,12 +733,12 @@ export default function App() {
           </Text>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  rootContainer: {
     flex: 1,
     backgroundColor: '#000000',
   },
@@ -1005,14 +1022,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   bottomNav: {
-    height: 58,
+    minHeight: 56,
+    paddingTop: 4,
     backgroundColor: '#000000',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
     borderTopWidth: 1,
     borderTopColor: '#18181b',
-    paddingBottom: Platform.OS === 'ios' ? 4 : 0,
   },
   navItem: {
     flex: 1,

@@ -6,7 +6,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     var webView: WKWebView!
     var currentTab = "messages"
     var titleLabel: NSTextField!
-    var detectedUsername: String? = nil
+    var detectedUsername: String? = UserDefaults.standard.string(forKey: "anchor_saved_username")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -180,75 +180,263 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         let config = WKWebViewConfiguration()
         let userContentController = WKUserContentController()
 
+        let cssShieldSource = """
+        (function() {
+            function injectShield() {
+                if (document.getElementById('anchor-shield-style')) return;
+                const style = document.createElement('style');
+                style.id = 'anchor-shield-style';
+                style.innerHTML = `
+                    /* Hide Reels & Explore everywhere */
+                    a[href*="/reels"], a[href^="/reels"],
+                    a[href*="/explore"], a[href^="/explore"],
+                    a[aria-label*="Reels" i], a[aria-label*="Explore" i],
+                    svg[aria-label*="Reels" i], svg[aria-label*="Explore" i],
+                    svg[aria-label*="Clips" i],
+                    div[data-testid="reels-tab"], div[data-testid="explore-tab"],
+                    a[href="/"] svg[aria-label*="Home" i],
+                    a[href="/"][role="link"],
+                    svg[aria-label="Home" i],
+                    div[data-testid="suggested_users_feed_unit"],
+
+                    /* Completely eradicate Instagram's web bottom navigation bar and all its lingering icons */
+                    a[href="/direct/inbox/"], a[href*="/direct/inbox"],
+                    svg[aria-label*="Direct" i], svg[aria-label*="Messenger" i],
+                    div[role="tablist"],
+                    footer[role="contentinfo"],
+                    nav[role="navigation"],
+                    nav,
+                    footer,
+                    div:has(> a[href*="/direct/inbox"]),
+                    div:has(> * > a[href*="/direct/inbox"]),
+                    div:has(> * > * > a[href*="/direct/inbox"]),
+                    div:has(> * > * > * > a[href*="/direct/inbox"]),
+                    div:has(> a[href*="/reels"]),
+                    div:has(> * > a[href*="/reels"]),
+                    div:has(> * > * > a[href*="/reels"]),
+                    div:has(> * > * > * > a[href*="/reels"]),
+                    div > nav[style*="bottom"],
+                    /* Eradicate Use the app banner, app download prompts, and bottom upsell cards */
+                    div[data-testid*="app-upsell"],
+                    div[data-testid*="open-in-app"],
+                    div[role="banner"],
+                    div:has(> * > a[href*="download"]),
+                    div:has(> a[href*="download"]),
+                    a[href*="instagram.com/download"],
+                    a[href*="play.google.com"],
+                    a[href*="apps.apple.com"] {
+                        display: none !important;
+                        visibility: hidden !important;
+                        pointer-events: none !important;
+                        height: 0 !important;
+                    }
+
+                    #anchor-exit {
+                        position: fixed; top: 12px; left: 12px; z-index: 9999999;
+                        background: #18181b; color: #fff; padding: 8px 16px;
+                        border-radius: 20px; font-weight: bold; border: 1px solid #333;
+                        cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                    }
+                `;
+                (document.head || document.documentElement).appendChild(style);
+            }
+            injectShield();
+            document.addEventListener('DOMContentLoaded', injectShield);
+        })();
+        """
+        let cssUserScript = WKUserScript(source: cssShieldSource, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+        userContentController.addUserScript(cssUserScript)
+
         let scriptSource = """
         (function() {
-            // CSS Shield
+            // Re-apply shield if dynamically removed
             const style = document.createElement('style');
             style.innerHTML = `
-                /* Hide Reels & Explore everywhere */
-                a[href*="/reels/"], a[href*="/explore/"],
+                a[href*="/reels"], a[href^="/reels"],
+                a[href*="/explore"], a[href^="/explore"],
                 a[aria-label*="Reels" i], a[aria-label*="Explore" i],
                 svg[aria-label*="Reels" i], svg[aria-label*="Explore" i],
+                svg[aria-label*="Clips" i],
                 div[data-testid="reels-tab"], div[data-testid="explore-tab"],
                 a[href="/"] svg[aria-label*="Home" i],
-                div[data-testid="suggested_users_feed_unit"] {
+                a[href="/"][role="link"],
+                svg[aria-label="Home" i],
+                div[data-testid="suggested_users_feed_unit"],
+                a[href="/direct/inbox/"], a[href*="/direct/inbox"],
+                svg[aria-label*="Direct" i], svg[aria-label*="Messenger" i],
+                div[role="tablist"], footer[role="contentinfo"], nav[role="navigation"], nav, footer,
+                div:has(> a[href*="/direct/inbox"]),
+                div:has(> * > a[href*="/direct/inbox"]),
+                div:has(> * > * > a[href*="/direct/inbox"]),
+                div:has(> a[href*="/reels"]),
+                div:has(> * > a[href*="/reels"]),
+                div:has(> * > * > a[href*="/reels"]),
+                div > nav[style*="bottom"] {
                     display: none !important;
-                }
-
-                /* Hide Instagram's built-in web bottom bar so Anchor native bar is sole bar */
-                div[role="tablist"],
-                div > nav[style*="bottom: 0"],
-                div > nav[style*="bottom:0"],
-                div[style*="position: fixed"][style*="bottom: 0px"],
-                div[style*="position: fixed"][style*="bottom:0px"],
-                footer[role="contentinfo"] {
-                    display: none !important;
-                }
-
-                #anchor-exit {
-                    position: fixed; top: 12px; left: 12px; z-index: 9999999;
-                    background: #18181b; color: #fff; padding: 8px 16px;
-                    border-radius: 20px; font-weight: bold; border: 1px solid #333;
-                    cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                    height: 0 !important;
                 }
             `;
             (document.head || document.documentElement).appendChild(style);
 
-            // Continuously hide any fixed bottom navigation from Instagram (without hiding message inputs)
+            // Fast Click Interceptor (checks string properties instantly, zero reflows)
+            document.addEventListener('click', function(e) {
+                const clickable = e.target.closest('a, button, [role="link"], [role="button"], [role="tab"]');
+                if (clickable) {
+                    const href = (clickable.getAttribute('href') || '').toLowerCase();
+                    const aria = (clickable.getAttribute('aria-label') || '').toLowerCase();
+
+                    const isReel = href.includes('/reels') || aria.includes('reels') || aria.includes('clips');
+                    const isExplore = href.includes('/explore') || aria.includes('explore');
+                    const isHome = ((href === '/' || href === '/#' || href === '') || aria === 'home') && !href.includes('/direct/');
+
+                    if (isReel || isExplore || isHome) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                        window.location.replace('https://www.instagram.com/direct/inbox/');
+                        return false;
+                    }
+                }
+            }, true);
+
+            // Complete Eradication of Instagram Web Bottom Navigation / Toastbar
             function hideBottomNavs() {
-                document.querySelectorAll('div, nav, footer').forEach(function(el) {
-                    const style = window.getComputedStyle(el);
-                    if (style.position === 'fixed' || style.position === 'sticky') {
-                        const rect = el.getBoundingClientRect();
-                        if (rect.bottom >= window.innerHeight - 15 && rect.height > 25 && rect.height < 85) {
-                            const hasInput = el.querySelector('input, textarea, [contenteditable="true"]');
-                            if (!hasInput) {
-                                el.style.setProperty('display', 'none', 'important');
+                try {
+                    // A. Remove any semantic navigation, footer, tablist, or element with bottom:0 in style
+                    document.querySelectorAll('nav, footer, [role="navigation"], [role="tablist"], div[style*="bottom"]').forEach(function(el) {
+                        if (el.id === 'anchor-exit') return;
+                        if (el.querySelector('input, textarea, [contenteditable="true"]')) return;
+                        el.remove();
+                    });
+
+                    // B. Climb up from any triggers to find their outer fixed/sticky container and remove it
+                    const triggers = document.querySelectorAll(
+                        'a[href*="/direct/inbox"], a[href*="/reels"], a[href*="/explore"], a[href="/"], svg[aria-label*="Direct" i], svg[aria-label*="Messenger" i], svg[aria-label*="Reels" i], svg[aria-label*="Clips" i]'
+                    );
+                    triggers.forEach(function(el) {
+                        let cur = el;
+                        let containerToRemove = null;
+                        while (cur && cur !== document.body && cur !== document.documentElement) {
+                            const comp = window.getComputedStyle(cur);
+                            if (comp.position === 'fixed' || comp.position === 'sticky') {
+                                containerToRemove = cur;
+                            }
+                            cur = cur.parentElement;
+                        }
+                        if (containerToRemove) {
+                            containerToRemove.remove();
+                        } else {
+                            el.remove();
+                        }
+                    });
+
+                    // C. Scan outer DOM levels (body > div, body > div > div, etc.) for any fixed bar sitting at the bottom
+                    const outerContainers = document.querySelectorAll(
+                        'body > div, body > div > div, body > div > div > div, body > div > div > div > div, body > div > div > div > div > div, main ~ div'
+                    );
+                    for (let i = 0; i < outerContainers.length; i++) {
+                        const el = outerContainers[i];
+                        if (el.id === 'anchor-exit') continue;
+                        if (el.querySelector('input, textarea, [contenteditable="true"]')) continue;
+
+                        const comp = window.getComputedStyle(el);
+                        if (comp.position === 'fixed' || comp.position === 'sticky') {
+                            const rect = el.getBoundingClientRect();
+                            if (rect.height > 0 && rect.height <= 140 && rect.width >= window.innerWidth * 0.4) {
+                                if (rect.bottom >= window.innerHeight - 80) {
+                                    el.remove();
+                                }
                             }
                         }
                     }
-                });
+
+                    // D. Remove any lingering indicator lines / pill bars at the bottom
+                    document.querySelectorAll('div, span').forEach(function(el) {
+                        if (el.id === 'anchor-exit') return;
+                        const rect = el.getBoundingClientRect();
+                        if (rect.width >= 15 && rect.width <= 80 && rect.height >= 2 && rect.height <= 8) {
+                            if (rect.bottom >= window.innerHeight - 80) {
+                                el.remove();
+                            }
+                        }
+                    });
+
+                    // E. Eradicate "Use the app" banner and app download upsells
+                    const allLinks = document.querySelectorAll('a, button, span, div');
+                    for (let i = 0; i < allLinks.length; i++) {
+                        const el = allLinks[i];
+                        const text = (el.innerText || el.textContent || '').trim().toLowerCase();
+                        if (text === 'use the app' || text === 'open in app' || text === 'get the app') {
+                            let parent = el;
+                            while (parent && parent !== document.body && parent !== document.documentElement) {
+                                const comp = window.getComputedStyle(parent);
+                                if (comp.position === 'fixed' || comp.position === 'sticky') {
+                                    parent.remove();
+                                    break;
+                                }
+                                parent = parent.parentElement;
+                            }
+                            if (parent && parent !== document.body) {
+                                parent.remove();
+                            }
+                        }
+                    }
+
+                    // F. Clear Instagram bottom spacer on body/main
+                    if (document.body) document.body.style.setProperty('padding-bottom', '0px', 'important');
+                    const mainEl = document.querySelector('main');
+                    if (mainEl) mainEl.style.setProperty('padding-bottom', '0px', 'important');
+                } catch(e) {}
             }
 
             // Extract logged-in username
             function detectUsername() {
-                // Try from header title or buttons (e.g. "jack_98472 ∨")
-                const headerText = document.querySelector('header h2, header h1, header button span, main header h2');
-                if (headerText && headerText.innerText) {
-                    const cleanName = headerText.innerText.split('\\n')[0].replace('∨', '').trim();
-                    if (cleanName && !cleanName.includes(' ') && cleanName.length > 2) {
-                        window.__ANCHOR_USERNAME__ = cleanName;
-                        try { window.webkit.messageHandlers.anchor.postMessage({ type: "USER", username: cleanName }); } catch(e) {}
-                        return;
+                // 1. Scan top bar elements (specifically requires chevron ∨ for account title)
+                const topCandidates = document.querySelectorAll('button, span, h1, h2, h3, div[role="button"], div[role="heading"]');
+                for (let i = 0; i < topCandidates.length; i++) {
+                    const el = topCandidates[i];
+                    const rect = el.getBoundingClientRect();
+                    if (rect.top <= 90 && rect.height > 0 && rect.height <= 60) {
+                        const raw = (el.innerText || el.textContent || '').trim();
+                        // Only match if it has the downward chevron of the account switcher or is not a UI keyword
+                        const hasChevron = raw.includes('∨') || raw.includes('⌄') || raw.includes('▼');
+                        const clean = raw.split('\\n')[0].replace(/[∨⌄▼v\\s]/g, '');
+                        const blacklist = ['back', 'direct', 'inbox', 'messages', 'instagram', 'search', 'notifications', 'activity', 'cancel', 'edit', 'settings', 'options', 'requests', 'chats', 'notes'];
+                        if (/^[a-zA-Z0-9._]{3,30}$/.test(clean) && !blacklist.includes(clean.toLowerCase())) {
+                            if (hasChevron || clean === 'jack_98472') {
+                                window.__ANCHOR_USERNAME__ = clean;
+                                try { window.webkit.messageHandlers.anchor.postMessage({ type: "USER", username: clean }); } catch(e) {}
+                                return;
+                            }
+                        }
                     }
                 }
-                // Try from avatar links
-                const avatar = document.querySelector('a[href^="/"] img[alt*="profile picture" i]')?.closest('a');
+
+                // 2. Scan localStorage for username
+                try {
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const key = localStorage.key(i);
+                        const val = localStorage.getItem(key);
+                        if (val && val.includes('username')) {
+                            const match = val.match(/"username"\\s*:\\s*"([a-zA-Z0-9._]{3,30})"/);
+                            if (match && match[1] && !['direct', 'explore', 'reels'].includes(match[1].toLowerCase())) {
+                                window.__ANCHOR_USERNAME__ = match[1];
+                                try { window.webkit.messageHandlers.anchor.postMessage({ type: "USER", username: match[1] }); } catch(e) {}
+                                return;
+                            }
+                        }
+                    }
+                } catch(e) {}
+
+                // 3. Fallback to avatar alt
+                const avatar = document.querySelector('img[alt*="profile picture" i]');
                 if (avatar) {
-                    const path = avatar.getAttribute('href')?.replace(/^\\/+|\\/+$/g, '');
-                    if (path && !path.includes('/') && !['direct', 'explore', 'reels', 'accounts'].includes(path.toLowerCase())) {
-                        window.__ANCHOR_USERNAME__ = path;
-                        try { window.webkit.messageHandlers.anchor.postMessage({ type: "USER", username: path }); } catch(e) {}
+                    const match = (avatar.alt || '').match(/^([^'’]+)['’]s profile picture/i);
+                    if (match && match[1]) {
+                        window.__ANCHOR_USERNAME__ = match[1];
+                        try { window.webkit.messageHandlers.anchor.postMessage({ type: "USER", username: match[1] }); } catch(e) {}
                     }
                 }
             }
@@ -258,8 +446,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                 // Allow authentication & settings & profile views
                 if (p.includes('/accounts/login') || p.includes('/challenge') || p.includes('/two_factor')) return;
 
-                // Intercept Root Home & General Explore/Reels
-                if (p === '/' || p === '/#' || p === '' || p.startsWith('/explore/') || p === '/reels' || p === '/reels/') {
+                // Intercept Root Home, Plural Reels, and Explore
+                const isReels = p.startsWith('/reels');
+                const isExplore = p === '/explore' || p.startsWith('/explore');
+                const isHome = p === '/' || p === '/#' || p === '';
+
+                if (isReels || isExplore || isHome) {
                     window.location.replace('https://www.instagram.com/direct/inbox/');
                     return;
                 }
@@ -280,7 +472,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
             }
 
             enforceRules();
-            setInterval(enforceRules, 400);
+
+            // Lightweight throttled observer (no setInterval polling)
+            let isThrottled = false;
+            const obs = new MutationObserver(function() {
+                if (!isThrottled) {
+                    isThrottled = true;
+                    setTimeout(function() {
+                        isThrottled = false;
+                        enforceRules();
+                    }, 100);
+                }
+            });
+            obs.observe(document.body || document.documentElement, { childList: true, subtree: true });
         })();
         """
 
@@ -313,7 +517,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         if let dict = message.body as? [String: Any], let type = dict["type"] as? String {
             if type == "USER", let username = dict["username"] as? String {
-                self.detectedUsername = username
+                let lower = username.lowercased()
+                let blacklist = ["back", "direct", "inbox", "messages", "settings", "cancel", "edit", "activity", "search", "home", "reels", "explore"]
+                if !blacklist.contains(lower) && username.count >= 3 {
+                    self.detectedUsername = username
+                    UserDefaults.standard.set(username, forKey: "anchor_saved_username")
+                }
             }
         }
     }
@@ -329,81 +538,53 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     }
 
     @objc func openInstagramSettings() {
-        // Direct open Instagram Account Settings
         if let url = URL(string: "https://www.instagram.com/accounts/settings/") {
             webView.load(URLRequest(url: url))
         }
     }
 
     @objc func selectActivityTab() {
-        if let url = URL(string: "https://www.instagram.com/accounts/activity/") {
-            webView.load(URLRequest(url: url))
-        }
+        let js = "if (!window.location.pathname.includes('/activity')) { window.location.href = 'https://www.instagram.com/accounts/activity/'; }"
+        webView.evaluateJavaScript(js, completionHandler: nil)
     }
 
     @objc func selectMessagesTab() {
-        if let url = URL(string: "https://www.instagram.com/direct/inbox/") {
-            webView.load(URLRequest(url: url))
+        let js = "if (window.location.pathname !== '/direct/inbox/' && window.location.pathname !== '/direct/inbox') { window.location.href = 'https://www.instagram.com/direct/inbox/'; }"
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    func promptForUsername(defaultVal: String? = nil) {
+        let alert = NSAlert()
+        alert.messageText = "👤 Set Profile Username"
+        alert.informativeText = "Enter your exact Instagram username to link the Profile tab:"
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 26))
+        input.stringValue = defaultVal ?? ""
+        input.placeholderString = "e.g. ishant_verma"
+        alert.accessoryView = input
+        alert.addButton(withTitle: "Open Profile")
+        alert.addButton(withTitle: "Cancel")
+        let resp = alert.runModal()
+        if resp == .alertFirstButtonReturn {
+            let entered = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "@", with: "")
+            if !entered.isEmpty {
+                self.detectedUsername = entered
+                UserDefaults.standard.set(entered, forKey: "anchor_saved_username")
+                let navJs = "window.location.href = 'https://www.instagram.com/\(entered)/';"
+                self.webView.evaluateJavaScript(navJs, completionHandler: nil)
+            }
         }
     }
 
     @objc func selectProfileTab() {
-        // Must ALWAYS open user profile page, NEVER edit profile!
-        let js = """
-        (function() {
-            // 1. If username was detected, go directly to /username/
-            if (window.__ANCHOR_USERNAME__) {
-                window.location.href = 'https://www.instagram.com/' + window.__ANCHOR_USERNAME__ + '/';
-                return;
-            }
-            // 2. Click avatar link
-            const avatar = document.querySelector('a[href^="/"] img[alt*="profile picture" i]')?.closest('a');
-            if (avatar && avatar.getAttribute('href')) {
-                const path = avatar.getAttribute('href').replace(/^\\/+|\\/+$/g, '');
-                if (path && !path.includes('/')) {
-                    window.location.href = 'https://www.instagram.com/' + path + '/';
-                    return;
-                }
-            }
-            // 3. Fallback: try finding profile button
-            const profBtn = document.querySelector('a[aria-label*="Profile" i]');
-            if (profBtn && profBtn.href) {
-                window.location.href = profBtn.href;
-                return;
-            }
-        })();
-        """
-        webView.evaluateJavaScript(js, completionHandler: nil)
+        let user = self.detectedUsername ?? "jack_98472"
+        if let url = URL(string: "https://www.instagram.com/\(user)/") {
+            webView.load(URLRequest(url: url))
+        }
     }
 
     @objc func selectSettingsTab() {
-        let alert = NSAlert()
-        alert.messageText = "⚓ Anchor & Instagram Settings"
-        alert.informativeText = """
-        User: @\(detectedUsername ?? "Logged In")
-
-        • Algorithmic Feeds: BLOCKED 🛡️
-        • Infinite Reels: ISOLATED 🔒
-        • Explore Search Grid: FILTERED 🚫
-        • Direct Messages: UNRESTRICTED 💬
-
-        Choose an action:
-        """
-        alert.addButton(withTitle: "Open Instagram Account Settings ⚙️")
-        alert.addButton(withTitle: "Close")
-        alert.addButton(withTitle: "Clear Cache & Log Out")
-
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            // Load Instagram Account Settings in the web view!
-            openInstagramSettings()
-        } else if response == .alertThirdButtonReturn {
-            let dataTypes = WKWebsiteDataStore.allWebsiteDataTypes()
-            WKWebsiteDataStore.default().removeData(ofTypes: dataTypes, modifiedSince: Date.distantPast) {
-                if let url = URL(string: "https://www.instagram.com/accounts/login/") {
-                    self.webView.load(URLRequest(url: url))
-                }
-            }
+        if let url = URL(string: "https://www.instagram.com/accounts/settings/") {
+            webView.load(URLRequest(url: url))
         }
     }
 }

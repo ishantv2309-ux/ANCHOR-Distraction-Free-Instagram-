@@ -44,6 +44,27 @@ const INJECTED_CSS_AND_PRELOAD = `
           max-height: 0 !important;
           overflow: hidden !important;
         }
+
+        /* 5. Strict Reel Overlay Isolation & Scroll Lock */
+        html.anchor-reel-isolated,
+        html.anchor-reel-isolated body,
+        body.anchor-reel-isolated {
+          overflow: hidden !important;
+          touch-action: none !important;
+          overscroll-behavior: none !important;
+          height: 100% !important;
+          max-height: 100vh !important;
+        }
+
+        .anchor-reel-isolated div[data-testid="suggested-users"],
+        .anchor-reel-isolated section:has(a[href*="/reels/"]),
+        .anchor-reel-isolated a[href*="/reels/"],
+        .anchor-reel-isolated svg[aria-label*="Down" i],
+        .anchor-reel-isolated svg[aria-label*="Up" i] {
+          display: none !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+        }
       \`;
       (document.head || document.documentElement).appendChild(style);
     }
@@ -91,6 +112,27 @@ const INJECTED_JAVASCRIPT = `
             height: 0 !important;
             max-height: 0 !important;
             overflow: hidden !important;
+          }
+
+          /* Reel Overlay Isolation & Scroll Lock */
+          html.anchor-reel-isolated,
+          html.anchor-reel-isolated body,
+          body.anchor-reel-isolated {
+            overflow: hidden !important;
+            touch-action: none !important;
+            overscroll-behavior: none !important;
+            height: 100% !important;
+            max-height: 100vh !important;
+          }
+
+          .anchor-reel-isolated div[data-testid="suggested-users"],
+          .anchor-reel-isolated section:has(a[href*="/reels/"]),
+          .anchor-reel-isolated a[href*="/reels/"],
+          .anchor-reel-isolated svg[aria-label*="Down" i],
+          .anchor-reel-isolated svg[aria-label*="Up" i] {
+            display: none !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
           }
         \`;
         (document.head || document.documentElement).appendChild(style);
@@ -325,13 +367,162 @@ const INJECTED_JAVASCRIPT = `
       }
     }
 
+    // 8. Strict Reel Isolation & Gesture Interception
+    function isReelOverlay() {
+      const p = window.location.pathname;
+      return p.startsWith('/reel/') || p.startsWith('/p/');
+    }
+
+    let touchStartY = 0;
+    let touchStartX = 0;
+
+    // Block vertical drag / swipe gestures before Instagram's listeners see them
+    window.addEventListener('touchstart', function(e) {
+      if (isReelOverlay() && e.touches && e.touches.length > 0) {
+        touchStartY = e.touches[0].clientY;
+        touchStartX = e.touches[0].clientX;
+      }
+    }, { capture: true, passive: false });
+
+    window.addEventListener('touchmove', function(e) {
+      if (isReelOverlay() && e.touches && e.touches.length > 0) {
+        const currentY = e.touches[0].clientY;
+        const currentX = e.touches[0].clientX;
+        const dy = Math.abs(currentY - touchStartY);
+        const dx = Math.abs(currentX - touchStartX);
+
+        // Block any vertical drag attempting to scroll/swipe to the next Reel
+        if (dy > 4 || dy >= dx) {
+          if (e.cancelable) e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          return false;
+        }
+      }
+    }, { capture: true, passive: false });
+
+    window.addEventListener('wheel', function(e) {
+      if (isReelOverlay()) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        return false;
+      }
+    }, { capture: true, passive: false });
+
+    window.addEventListener('keydown', function(e) {
+      if (isReelOverlay() && ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', ' '].includes(e.key)) {
+        if (e.target && !['input', 'textarea'].includes(e.target.tagName.toLowerCase())) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }
+      }
+    }, { capture: true });
+
+    // Lock Reel DOM, hide recommendation handles, and ensure Back to Messages button
+    function applyReelIsolation() {
+      const isReel = isReelOverlay();
+      const docEl = document.documentElement;
+      const docBody = document.body;
+
+      if (isReel) {
+        if (docEl) {
+          docEl.classList.add('anchor-reel-isolated');
+          docEl.style.setProperty('overflow', 'hidden', 'important');
+          docEl.style.setProperty('touch-action', 'none', 'important');
+          docEl.style.setProperty('overscroll-behavior', 'none', 'important');
+        }
+        if (docBody) {
+          docBody.classList.add('anchor-reel-isolated');
+          docBody.style.setProperty('overflow', 'hidden', 'important');
+          docBody.style.setProperty('touch-action', 'none', 'important');
+          docBody.style.setProperty('overscroll-behavior', 'none', 'important');
+        }
+
+        // Hide recommendation carousels, related reels, and "Watch more"
+        document.querySelectorAll('h2, h3, span, div, a').forEach(function(el) {
+          if (el.children.length > 2) return;
+          const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
+          if (
+            txt === 'watch more reels' || 
+            txt === 'more reels' || 
+            txt === 'suggested reels' || 
+            txt === 'related reels' ||
+            txt === 'watch again' ||
+            txt.startsWith('more reels from')
+          ) {
+            let container = el.closest('div[style*="flex"]') || el.closest('section') || el.parentElement;
+            if (container) {
+              container.style.setProperty('display', 'none', 'important');
+            }
+          }
+        });
+
+        // Ensure the Floating "Back to Messages" button is visible
+        if (!document.getElementById('anchor-exit-reel-btn')) {
+          const btn = document.createElement('button');
+          btn.id = 'anchor-exit-reel-btn';
+          btn.innerHTML = '⚓ Back to Messages';
+          btn.style.cssText = \`
+            position: fixed !important;
+            top: 14px !important;
+            left: 14px !important;
+            z-index: 9999999 !important;
+            background: rgba(15, 23, 42, 0.94) !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.3) !important;
+            border-radius: 20px !important;
+            padding: 8px 16px !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+            font-size: 13px !important;
+            font-weight: 700 !important;
+            cursor: pointer !important;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.7) !important;
+            backdrop-filter: blur(8px) !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            pointer-events: auto !important;
+          \`;
+          btn.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            sendToNative({ type: 'RETURN_TO_MESSAGES' });
+            if (window.history.length > 1) {
+              window.history.back();
+            } else {
+              window.location.replace('https://www.instagram.com/direct/inbox/');
+            }
+          };
+          (document.body || document.documentElement).appendChild(btn);
+        }
+      } else {
+        if (docEl) {
+          docEl.classList.remove('anchor-reel-isolated');
+          docEl.style.removeProperty('overflow');
+          docEl.style.removeProperty('touch-action');
+          docEl.style.removeProperty('overscroll-behavior');
+        }
+        if (docBody) {
+          docBody.classList.remove('anchor-reel-isolated');
+          docBody.style.removeProperty('overflow');
+          docBody.style.removeProperty('touch-action');
+          docBody.style.removeProperty('overscroll-behavior');
+        }
+        const existing = document.getElementById('anchor-exit-reel-btn');
+        if (existing) existing.remove();
+      }
+    }
+
     applyStyles();
     purgeAppBanners();
     enforceInboxRoute();
     purgeToastbar();
     handleActivityView();
+    applyReelIsolation();
 
-    // 8. Lightweight MutationObserver (debounced to 100ms)
+    // 9. Lightweight MutationObserver (debounced to 100ms)
     let isThrottled = false;
     const observer = new MutationObserver(() => {
       if (!isThrottled) {
@@ -343,6 +534,7 @@ const INJECTED_JAVASCRIPT = `
           enforceInboxRoute();
           purgeToastbar();
           handleActivityView();
+          applyReelIsolation();
         }, 100);
       }
     });
@@ -352,9 +544,17 @@ const INJECTED_JAVASCRIPT = `
   true;
 `;
 
+function extractReelId(url) {
+  if (!url) return null;
+  const match = url.match(/\/(reel|p)\/([A-Za-z0-9_-]+)/);
+  return match ? match[2] : null;
+}
+
 function MainScreen() {
   const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
+  const activeTargetReelIdRef = useRef(null);
+  const lastChatUrlRef = useRef('https://www.instagram.com/direct/inbox/');
   const [activeTab, setActiveTab] = useState('messages');
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [canGoBack, setCanGoBack] = useState(false);
@@ -370,16 +570,40 @@ function MainScreen() {
     return () => sub.remove();
   }, [canGoBack, activeTab]);
 
+  const handleReturnToMessages = () => {
+    activeTargetReelIdRef.current = null;
+    setActiveTab('messages');
+    if (!webViewRef.current) return;
+    const returnUrl = lastChatUrlRef.current || 'https://www.instagram.com/direct/inbox/';
+    webViewRef.current.injectJavaScript(`
+      (function() {
+        window.__ANCHOR_ACTIVE_TAB__ = 'messages';
+        if (window.history.length > 1) {
+          window.history.back();
+        } else {
+          window.location.replace('${returnUrl}');
+        }
+      })();
+      true;
+    `);
+  };
+
   const onMessage = (event) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
       if (data.type === 'LOGGED_IN_USER' && data.username) {
         setLoggedInUser(data.username);
+      } else if (data.type === 'RETURN_TO_MESSAGES') {
+        handleReturnToMessages();
       }
     } catch(e) {}
   };
 
   const handleGoBack = () => {
+    if (activeTargetReelIdRef.current) {
+      handleReturnToMessages();
+      return;
+    }
     if (!webViewRef.current) return;
     webViewRef.current.injectJavaScript(`
       (function() {
@@ -415,6 +639,7 @@ function MainScreen() {
 
   const handleTabPress = (tab) => {
     setActiveTab(tab);
+    activeTargetReelIdRef.current = null;
     if (!webViewRef.current) return;
 
     if (tab === 'activity') {
@@ -545,8 +770,56 @@ function MainScreen() {
             webViewRef.current.injectJavaScript(INJECTED_JAVASCRIPT);
           }
         }}
+        onShouldStartLoadWithRequest={(request) => {
+          const url = request.url || '';
+          const path = url.toLowerCase();
+
+          // 1. Direct message navigation tracking
+          if (path.includes('/direct/')) {
+            lastChatUrlRef.current = url;
+            activeTargetReelIdRef.current = null;
+            return true;
+          }
+
+          // 2. Block infinite scrolling feeds (plural /reels, /explore, root home)
+          if (path.includes('/reels/') || path.includes('/explore/') || url === 'https://www.instagram.com/' || url === 'https://www.instagram.com/#') {
+            handleReturnToMessages();
+            return false;
+          }
+
+          // 3. Strict Reel overlay isolation guard
+          if (path.includes('/reel/') || path.includes('/p/')) {
+            const reelId = extractReelId(url);
+            if (!activeTargetReelIdRef.current) {
+              activeTargetReelIdRef.current = reelId;
+              return true;
+            } else if (reelId && reelId !== activeTargetReelIdRef.current) {
+              // User or Instagram attempted to swipe to a 2nd reel -> intercept and return to messages
+              handleReturnToMessages();
+              return false;
+            }
+          }
+
+          return true;
+        }}
         onNavigationStateChange={(navState) => {
           setCanGoBack(navState.canGoBack);
+          const currentUrl = navState.url || '';
+          const path = currentUrl.toLowerCase();
+
+          if (path.includes('/direct/')) {
+            lastChatUrlRef.current = currentUrl;
+            activeTargetReelIdRef.current = null;
+          } else if (path.includes('/reel/') || path.includes('/p/')) {
+            const reelId = extractReelId(currentUrl);
+            if (!activeTargetReelIdRef.current) {
+              activeTargetReelIdRef.current = reelId;
+            } else if (reelId && reelId !== activeTargetReelIdRef.current) {
+              handleReturnToMessages();
+            }
+          } else if (path.includes('/reels/') || path.includes('/explore/')) {
+            handleReturnToMessages();
+          }
         }}
         onMessage={onMessage}
         startInLoadingState={true}

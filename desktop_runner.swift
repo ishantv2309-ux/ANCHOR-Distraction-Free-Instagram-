@@ -7,6 +7,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     var currentTab = "messages"
     var titleLabel: NSTextField!
     var detectedUsername: String? = UserDefaults.standard.string(forKey: "anchor_saved_username")
+    var activeTargetReelId: String? = nil
+    var lastChatUrl: String = "https://www.instagram.com/direct/inbox/"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -277,6 +279,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                     pointer-events: none !important;
                     height: 0 !important;
                 }
+
+                /* Strict Reel Overlay Isolation & Scroll Lock */
+                html.anchor-reel-isolated,
+                html.anchor-reel-isolated body,
+                body.anchor-reel-isolated {
+                    overflow: hidden !important;
+                    touch-action: none !important;
+                    overscroll-behavior: none !important;
+                    height: 100% !important;
+                    max-height: 100vh !important;
+                }
+
+                .anchor-reel-isolated div[data-testid="suggested-users"],
+                .anchor-reel-isolated section:has(a[href*="/reels/"]),
+                .anchor-reel-isolated a[href*="/reels/"],
+                .anchor-reel-isolated svg[aria-label*="Down" i],
+                .anchor-reel-isolated svg[aria-label*="Up" i] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                }
             `;
             (document.head || document.documentElement).appendChild(style);
 
@@ -475,19 +498,132 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                     return;
                 }
 
-                // DM Reel Overlay
-                if (p.startsWith('/reel/') || p.startsWith('/p/')) {
-                    if (!document.getElementById('anchor-exit')) {
-                        const b = document.createElement('button');
-                        b.id = 'anchor-exit';
-                        b.innerHTML = '⚓ Back to Messages';
-                        b.onclick = () => window.location.replace('https://www.instagram.com/direct/inbox/');
-                        document.body.appendChild(b);
-                    }
-                }
-
                 hideBottomNavs();
                 detectUsername();
+                applyReelIsolation();
+            }
+
+            // Strict Reel Isolation & Gesture Interception
+            function isReelOverlay() {
+                const p = window.location.pathname;
+                return p.startsWith('/reel/') || p.startsWith('/p/');
+            }
+
+            let touchStartY = 0;
+            let touchStartX = 0;
+
+            window.addEventListener('touchstart', function(e) {
+                if (isReelOverlay() && e.touches && e.touches.length > 0) {
+                    touchStartY = e.touches[0].clientY;
+                    touchStartX = e.touches[0].clientX;
+                }
+            }, { capture: true, passive: false });
+
+            window.addEventListener('touchmove', function(e) {
+                if (isReelOverlay() && e.touches && e.touches.length > 0) {
+                    const currentY = e.touches[0].clientY;
+                    const currentX = e.touches[0].clientX;
+                    const dy = Math.abs(currentY - touchStartY);
+                    const dx = Math.abs(currentX - touchStartX);
+
+                    if (dy > 4 || dy >= dx) {
+                        if (e.cancelable) e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                        return false;
+                    }
+                }
+            }, { capture: true, passive: false });
+
+            window.addEventListener('wheel', function(e) {
+                if (isReelOverlay()) {
+                    if (e.cancelable) e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    return false;
+                }
+            }, { capture: true, passive: false });
+
+            window.addEventListener('keydown', function(e) {
+                if (isReelOverlay() && ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', ' '].includes(e.key)) {
+                    if (e.target && !['input', 'textarea'].includes(e.target.tagName.toLowerCase())) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
+                    }
+                }
+            }, { capture: true });
+
+            function applyReelIsolation() {
+                const isReel = isReelOverlay();
+                const docEl = document.documentElement;
+                const docBody = document.body;
+
+                if (isReel) {
+                    if (docEl) {
+                        docEl.classList.add('anchor-reel-isolated');
+                        docEl.style.setProperty('overflow', 'hidden', 'important');
+                        docEl.style.setProperty('touch-action', 'none', 'important');
+                        docEl.style.setProperty('overscroll-behavior', 'none', 'important');
+                    }
+                    if (docBody) {
+                        docBody.classList.add('anchor-reel-isolated');
+                        docBody.style.setProperty('overflow', 'hidden', 'important');
+                        docBody.style.setProperty('touch-action', 'none', 'important');
+                        docBody.style.setProperty('overscroll-behavior', 'none', 'important');
+                    }
+
+                    document.querySelectorAll('h2, h3, span, div, a').forEach(function(el) {
+                        if (el.children.length > 2) return;
+                        const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
+                        if (
+                            txt === 'watch more reels' || 
+                            txt === 'more reels' || 
+                            txt === 'suggested reels' || 
+                            txt === 'related reels' ||
+                            txt === 'watch again' ||
+                            txt.startsWith('more reels from')
+                        ) {
+                            let container = el.closest('div[style*="flex"]') || el.closest('section') || el.parentElement;
+                            if (container) {
+                                container.style.setProperty('display', 'none', 'important');
+                            }
+                        }
+                    });
+
+                    if (!document.getElementById('anchor-exit-reel-btn')) {
+                        const btn = document.createElement('button');
+                        btn.id = 'anchor-exit-reel-btn';
+                        btn.innerHTML = '⚓ Back to Messages';
+                        btn.style.cssText = 'position: fixed !important; top: 14px !important; left: 14px !important; z-index: 9999999 !important; background: rgba(15, 23, 42, 0.94) !important; color: #ffffff !important; border: 1px solid rgba(255, 255, 255, 0.3) !important; border-radius: 20px !important; padding: 8px 16px !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important; font-size: 13px !important; font-weight: 700 !important; cursor: pointer !important; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.7) !important; backdrop-filter: blur(8px) !important; display: flex !important; align-items: center !important; gap: 6px !important; pointer-events: auto !important;';
+                        btn.onclick = function(e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            try { window.webkit.messageHandlers.anchor.postMessage({ type: 'RETURN_TO_MESSAGES' }); } catch(err) {}
+                            if (window.history.length > 1) {
+                                window.history.back();
+                            } else {
+                                window.location.replace('https://www.instagram.com/direct/inbox/');
+                            }
+                        };
+                        (document.body || document.documentElement).appendChild(btn);
+                    }
+                } else {
+                    if (docEl) {
+                        docEl.classList.remove('anchor-reel-isolated');
+                        docEl.style.removeProperty('overflow');
+                        docEl.style.removeProperty('touch-action');
+                        docEl.style.removeProperty('overscroll-behavior');
+                    }
+                    if (docBody) {
+                        docBody.classList.remove('anchor-reel-isolated');
+                        docBody.style.removeProperty('overflow');
+                        docBody.style.removeProperty('touch-action');
+                        docBody.style.removeProperty('overscroll-behavior');
+                    }
+                    const existing = document.getElementById('anchor-exit-reel-btn');
+                    if (existing) existing.remove();
+                }
             }
 
             enforceRules();
@@ -533,8 +669,71 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    func extractReelId(from url: URL) -> String? {
+        let path = url.path
+        let components = path.split(separator: "/")
+        if let idx = components.firstIndex(where: { $0 == "reel" || $0 == "p" }), idx + 1 < components.count {
+            return String(components[idx + 1])
+        }
+        return nil
+    }
+
+    func returnToMessages() {
+        self.activeTargetReelId = nil
+        self.currentTab = "messages"
+        let targetUrl = self.lastChatUrl.isEmpty ? "https://www.instagram.com/direct/inbox/" : self.lastChatUrl
+        if let url = URL(string: targetUrl) {
+            self.webView.load(URLRequest(url: url))
+        }
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.allow)
+            return
+        }
+
+        let path = url.path.lowercased()
+
+        // 1. Direct message navigation tracking
+        if path.contains("/direct/") {
+            self.lastChatUrl = url.absoluteString
+            self.activeTargetReelId = nil
+            decisionHandler(.allow)
+            return
+        }
+
+        // 2. Block infinite scrolling feeds (plural /reels, /explore, root home)
+        if path.hasPrefix("/reels") || path.hasPrefix("/explore") || path == "/" || path == "" {
+            decisionHandler(.cancel)
+            returnToMessages()
+            return
+        }
+
+        // 3. Strict Reel overlay isolation guard
+        if path.hasPrefix("/reel/") || path.hasPrefix("/p/") {
+            let reelId = extractReelId(from: url)
+            if self.activeTargetReelId == nil {
+                self.activeTargetReelId = reelId
+                decisionHandler(.allow)
+                return
+            } else if let id = reelId, id != self.activeTargetReelId {
+                // Swiping or navigating to a 2nd reel is strictly blocked
+                decisionHandler(.cancel)
+                returnToMessages()
+                return
+            }
+        }
+
+        decisionHandler(.allow)
+    }
+
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         if let dict = message.body as? [String: Any], let type = dict["type"] as? String {
+            if type == "RETURN_TO_MESSAGES" {
+                returnToMessages()
+                return
+            }
             if type == "USER", let username = dict["username"] as? String {
                 let lower = username.lowercased()
                 let blacklist = ["back", "direct", "inbox", "messages", "settings", "cancel", "edit", "activity", "search", "home", "reels", "explore"]
@@ -547,6 +746,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     }
 
     @objc func goBack() {
+        if self.activeTargetReelId != nil {
+            returnToMessages()
+            return
+        }
         if webView.canGoBack {
             webView.goBack()
         }
@@ -563,6 +766,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     }
 
     @objc func selectActivityTab() {
+        self.activeTargetReelId = nil
         let js = """
         (function() {
             window.__ANCHOR_ACTIVE_TAB__ = 'activity';
@@ -578,6 +782,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     }
 
     @objc func selectMessagesTab() {
+        self.activeTargetReelId = nil
         let js = """
         (function() {
             window.__ANCHOR_ACTIVE_TAB__ = 'messages';
@@ -612,6 +817,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     }
 
     @objc func selectProfileTab() {
+        self.activeTargetReelId = nil
         if let user = self.detectedUsername, !user.isEmpty {
             if let url = URL(string: "https://www.instagram.com/\(user)/") {
                 webView.load(URLRequest(url: url))
@@ -635,6 +841,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     }
 
     @objc func selectSettingsTab() {
+        self.activeTargetReelId = nil
         if let url = URL(string: "https://www.instagram.com/accounts/settings/") {
             webView.load(URLRequest(url: url))
         }

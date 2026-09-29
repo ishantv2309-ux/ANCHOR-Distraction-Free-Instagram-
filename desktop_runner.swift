@@ -301,53 +301,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                 }
             }, true);
 
-            // Complete Eradication of Instagram Web Bottom Navigation / Toastbar
+            // Eradication of Instagram Web Bottom Navigation / Toastbar
             function hideBottomNavs() {
                 try {
-                    // A. Remove any semantic navigation, footer, tablist, or element with bottom:0 in style
-                    document.querySelectorAll('nav, footer, [role="navigation"], [role="tablist"], div[style*="bottom"]').forEach(function(el) {
-                        if (el.id === 'anchor-exit') return;
-                        if (el.querySelector('input, textarea, [contenteditable="true"]')) return;
-                        el.remove();
-                    });
+                    const vh = window.innerHeight;
+                    const vw = window.innerWidth;
+                    const candidates = document.querySelectorAll('div, footer, nav, [role="navigation"], [role="tablist"]');
 
-                    // B. Climb up from any triggers to find their outer fixed/sticky container and remove it
-                    const triggers = document.querySelectorAll(
-                        'a[href*="/direct/inbox"], a[href*="/reels"], a[href*="/explore"], a[href="/"], svg[aria-label*="Direct" i], svg[aria-label*="Messenger" i], svg[aria-label*="Reels" i], svg[aria-label*="Clips" i]'
-                    );
-                    triggers.forEach(function(el) {
-                        let cur = el;
-                        let containerToRemove = null;
-                        while (cur && cur !== document.body && cur !== document.documentElement) {
-                            const comp = window.getComputedStyle(cur);
-                            if (comp.position === 'fixed' || comp.position === 'sticky') {
-                                containerToRemove = cur;
-                            }
-                            cur = cur.parentElement;
-                        }
-                        if (containerToRemove) {
-                            containerToRemove.remove();
-                        } else {
-                            el.remove();
-                        }
-                    });
-
-                    // C. Scan outer DOM levels (body > div, body > div > div, etc.) for any fixed bar sitting at the bottom
-                    const outerContainers = document.querySelectorAll(
-                        'body > div, body > div > div, body > div > div > div, body > div > div > div > div, body > div > div > div > div > div, main ~ div'
-                    );
-                    for (let i = 0; i < outerContainers.length; i++) {
-                        const el = outerContainers[i];
+                    for (let i = 0; i < candidates.length; i++) {
+                        const el = candidates[i];
                         if (el.id === 'anchor-exit') continue;
-                        if (el.querySelector('input, textarea, [contenteditable="true"]')) continue;
+                        if (el.querySelector('input, textarea, form, [contenteditable="true"]')) continue;
 
                         const comp = window.getComputedStyle(el);
                         if (comp.position === 'fixed' || comp.position === 'sticky') {
                             const rect = el.getBoundingClientRect();
-                            if (rect.height > 0 && rect.height <= 140 && rect.width >= window.innerWidth * 0.4) {
-                                if (rect.bottom >= window.innerHeight - 80) {
-                                    el.remove();
-                                }
+                            // Exact bottom bar dimensions: height between 35px and 85px, sitting at bottom 95px, width >= 70%
+                            if (rect.height >= 35 && rect.height <= 85 && rect.top >= vh - 95 && rect.width >= vw * 0.7) {
+                                el.style.setProperty('display', 'none', 'important');
+                                el.style.setProperty('visibility', 'hidden', 'important');
+                                el.style.setProperty('pointer-events', 'none', 'important');
+                                el.style.setProperty('height', '0px', 'important');
                             }
                         }
                     }
@@ -393,19 +367,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
             // Extract logged-in username
             function detectUsername() {
-                // 1. Scan top bar elements (specifically requires chevron ∨ for account title)
+                const ignored = ['direct', 'inbox', 'messages', 'instagram', 'search', 'notifications', 'activity', 'cancel', 'edit', 'settings', 'options', 'requests', 'chats', 'notes', 'explore', 'reels', 'accounts', 'stories', 'legal', 'privacy', 'about', 'p', 'reel'];
+
+                // 1. Scan avatar link in bottom bar or page
+                const avatarLink = document.querySelector('a[href^="/"] img[alt*="profile picture" i]')?.closest('a') ||
+                                   document.querySelector('a[href^="/"][role="link"] img')?.closest('a');
+                if (avatarLink && avatarLink.getAttribute('href')) {
+                    const href = avatarLink.getAttribute('href').replace(/^\\/+|\\/+$/g, '');
+                    if (href && !href.includes('/') && !ignored.includes(href.toLowerCase())) {
+                        window.__ANCHOR_USERNAME__ = href;
+                        try { window.webkit.messageHandlers.anchor.postMessage({ type: "USER", username: href }); } catch(e) {}
+                        return;
+                    }
+                }
+
+                // 2. Scan top bar elements (specifically requires chevron ∨ for account switcher)
                 const topCandidates = document.querySelectorAll('button, span, h1, h2, h3, div[role="button"], div[role="heading"]');
                 for (let i = 0; i < topCandidates.length; i++) {
                     const el = topCandidates[i];
                     const rect = el.getBoundingClientRect();
                     if (rect.top <= 90 && rect.height > 0 && rect.height <= 60) {
                         const raw = (el.innerText || el.textContent || '').trim();
-                        // Only match if it has the downward chevron of the account switcher or is not a UI keyword
                         const hasChevron = raw.includes('∨') || raw.includes('⌄') || raw.includes('▼');
                         const clean = raw.split('\\n')[0].replace(/[∨⌄▼v\\s]/g, '');
-                        const blacklist = ['back', 'direct', 'inbox', 'messages', 'instagram', 'search', 'notifications', 'activity', 'cancel', 'edit', 'settings', 'options', 'requests', 'chats', 'notes'];
-                        if (/^[a-zA-Z0-9._]{3,30}$/.test(clean) && !blacklist.includes(clean.toLowerCase())) {
-                            if (hasChevron || clean === 'jack_98472') {
+                        if (/^[a-zA-Z0-9._]{3,30}$/.test(clean) && !ignored.includes(clean.toLowerCase())) {
+                            if (hasChevron) {
                                 window.__ANCHOR_USERNAME__ = clean;
                                 try { window.webkit.messageHandlers.anchor.postMessage({ type: "USER", username: clean }); } catch(e) {}
                                 return;
@@ -414,14 +400,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                     }
                 }
 
-                // 2. Scan localStorage for username
+                // 3. Scan window._sharedData and __initialData
+                if (window._sharedData?.config?.viewer?.username) {
+                    const u = window._sharedData.config.viewer.username;
+                    window.__ANCHOR_USERNAME__ = u;
+                    try { window.webkit.messageHandlers.anchor.postMessage({ type: "USER", username: u }); } catch(e) {}
+                    return;
+                }
+                if (window.__initialData?.data?.viewer?.username) {
+                    const u = window.__initialData.data.viewer.username;
+                    window.__ANCHOR_USERNAME__ = u;
+                    try { window.webkit.messageHandlers.anchor.postMessage({ type: "USER", username: u }); } catch(e) {}
+                    return;
+                }
+
+                // 4. Scan localStorage for username
                 try {
                     for (let i = 0; i < localStorage.length; i++) {
                         const key = localStorage.key(i);
                         const val = localStorage.getItem(key);
                         if (val && val.includes('username')) {
                             const match = val.match(/"username"\\s*:\\s*"([a-zA-Z0-9._]{3,30})"/);
-                            if (match && match[1] && !['direct', 'explore', 'reels'].includes(match[1].toLowerCase())) {
+                            if (match && match[1] && !ignored.includes(match[1].toLowerCase())) {
                                 window.__ANCHOR_USERNAME__ = match[1];
                                 try { window.webkit.messageHandlers.anchor.postMessage({ type: "USER", username: match[1] }); } catch(e) {}
                                 return;
@@ -430,11 +430,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                     }
                 } catch(e) {}
 
-                // 3. Fallback to avatar alt
+                // 5. Fallback to avatar alt
                 const avatar = document.querySelector('img[alt*="profile picture" i]');
                 if (avatar) {
                     const match = (avatar.alt || '').match(/^([^'’]+)['’]s profile picture/i);
-                    if (match && match[1]) {
+                    if (match && match[1] && !ignored.includes(match[1].toLowerCase())) {
                         window.__ANCHOR_USERNAME__ = match[1];
                         try { window.webkit.messageHandlers.anchor.postMessage({ type: "USER", username: match[1] }); } catch(e) {}
                     }
@@ -450,6 +450,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                 const isReels = p.startsWith('/reels');
                 const isExplore = p === '/explore' || p.startsWith('/explore');
                 const isHome = p === '/' || p === '/#' || p === '';
+
+                if (window.__ANCHOR_ACTIVE_TAB__ === 'activity' || window.location.search.includes('activity=1')) {
+                    const headings = document.querySelectorAll('h1, h2, h3, header, span');
+                    let isNotifOpen = false;
+                    for (let i = 0; i < headings.length; i++) {
+                        if ((headings[i].innerText || '').toLowerCase().includes('notification')) {
+                            isNotifOpen = true;
+                            break;
+                        }
+                    }
+                    if (!isNotifOpen && !window.__ACTIVITY_TRIGGERED__) {
+                        window.__ACTIVITY_TRIGGERED__ = true;
+                        const heart = document.querySelector('svg[aria-label*="Activity" i], svg[aria-label*="Notification" i], a[href*="/activity"]')?.closest('a, button, div[role="button"]');
+                        if (heart) {
+                            heart.click();
+                        }
+                    }
+                    return;
+                }
 
                 if (isReels || isExplore || isHome) {
                     window.location.replace('https://www.instagram.com/direct/inbox/');
@@ -544,12 +563,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     }
 
     @objc func selectActivityTab() {
-        let js = "if (!window.location.pathname.includes('/activity')) { window.location.href = 'https://www.instagram.com/accounts/activity/'; }"
+        let js = """
+        (function() {
+            window.__ANCHOR_ACTIVE_TAB__ = 'activity';
+            const heart = document.querySelector('svg[aria-label*="Activity" i], svg[aria-label*="Notification" i], a[href*="/activity"]')?.closest('a, button, div[role="button"]');
+            if (heart) {
+                heart.click();
+            } else {
+                window.location.href = 'https://www.instagram.com/?activity=1';
+            }
+        })();
+        """
         webView.evaluateJavaScript(js, completionHandler: nil)
     }
 
     @objc func selectMessagesTab() {
-        let js = "if (window.location.pathname !== '/direct/inbox/' && window.location.pathname !== '/direct/inbox') { window.location.href = 'https://www.instagram.com/direct/inbox/'; }"
+        let js = """
+        (function() {
+            window.__ANCHOR_ACTIVE_TAB__ = 'messages';
+            if (window.location.pathname !== '/direct/inbox/' && window.location.pathname !== '/direct/inbox') {
+                window.location.href = 'https://www.instagram.com/direct/inbox/';
+            }
+        })();
+        """
         webView.evaluateJavaScript(js, completionHandler: nil)
     }
 
@@ -576,10 +612,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     }
 
     @objc func selectProfileTab() {
-        let user = self.detectedUsername ?? "jack_98472"
-        if let url = URL(string: "https://www.instagram.com/\(user)/") {
-            webView.load(URLRequest(url: url))
+        if let user = self.detectedUsername, !user.isEmpty {
+            if let url = URL(string: "https://www.instagram.com/\(user)/") {
+                webView.load(URLRequest(url: url))
+                return
+            }
         }
+        let js = """
+        (function() {
+            const avatar = document.querySelector('a[href^="/"] img[alt*="profile picture" i]')?.closest('a') ||
+                           document.querySelector('a[aria-label*="Profile" i]');
+            if (avatar && avatar.getAttribute('href')) {
+                window.location.href = avatar.href;
+            } else if (avatar) {
+                avatar.click();
+            } else {
+                window.location.href = 'https://www.instagram.com/accounts/edit/';
+            }
+        })();
+        """
+        webView.evaluateJavaScript(js, completionHandler: nil)
     }
 
     @objc func selectSettingsTab() {

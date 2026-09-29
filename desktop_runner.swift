@@ -693,20 +693,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
             return
         }
 
+        // Only guard main-frame navigations
+        guard navigationAction.targetFrame?.isMainFrame ?? true else {
+            decisionHandler(.allow)
+            return
+        }
+
         let path = url.path.lowercased()
 
-        // 1. Direct message navigation tracking
-        if path.contains("/direct/") {
-            self.lastChatUrl = url.absoluteString
+        // 1. Direct message navigation tracking & allow auth/api
+        if path.contains("/direct/") || path.contains("/accounts/") || path.contains("/api/") {
+            if path.contains("/direct/") {
+                self.lastChatUrl = url.absoluteString
+            }
             self.activeTargetReelId = nil
             decisionHandler(.allow)
             return
         }
 
-        // 2. Block infinite scrolling feeds (plural /reels, /explore, root home)
-        if path.hasPrefix("/reels") || path.hasPrefix("/explore") || path == "/" || path == "" {
+        // 2. Block plural /reels and /explore
+        if path.hasPrefix("/reels") || path.hasPrefix("/explore") {
             decisionHandler(.cancel)
-            returnToMessages()
+            DispatchQueue.main.async { [weak self] in
+                self?.returnToMessages()
+            }
             return
         }
 
@@ -720,7 +730,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
             } else if let id = reelId, id != self.activeTargetReelId {
                 // Swiping or navigating to a 2nd reel is strictly blocked
                 decisionHandler(.cancel)
-                returnToMessages()
+                DispatchQueue.main.async { [weak self] in
+                    self?.returnToMessages()
+                }
                 return
             }
         }

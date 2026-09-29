@@ -578,10 +578,12 @@ function MainScreen() {
     webViewRef.current.injectJavaScript(`
       (function() {
         window.__ANCHOR_ACTIVE_TAB__ = 'messages';
-        if (window.history.length > 1) {
-          window.history.back();
-        } else {
-          window.location.replace('${returnUrl}');
+        if (window.location.pathname.startsWith('/reel/') || window.location.pathname.startsWith('/p/')) {
+          if (window.history.length > 1) {
+            window.history.back();
+          } else {
+            window.location.replace('${returnUrl}');
+          }
         }
       })();
       true;
@@ -772,30 +774,32 @@ function MainScreen() {
         }}
         onShouldStartLoadWithRequest={(request) => {
           const url = request.url || '';
-          const path = url.toLowerCase();
+          const path = (url.split('?')[0] || '').toLowerCase();
 
-          // 1. Direct message navigation tracking
-          if (path.includes('/direct/')) {
-            lastChatUrlRef.current = url;
+          // Always allow authentication, login challenges, API, and direct messages
+          if (path.includes('/accounts/') || path.includes('/direct/') || path.includes('/api/')) {
+            if (path.includes('/direct/')) {
+              lastChatUrlRef.current = url;
+            }
             activeTargetReelIdRef.current = null;
             return true;
           }
 
-          // 2. Block infinite scrolling feeds (plural /reels, /explore, root home)
-          if (path.includes('/reels/') || path.includes('/explore/') || url === 'https://www.instagram.com/' || url === 'https://www.instagram.com/#') {
-            handleReturnToMessages();
+          // Plural reels feed or explore is blocked in Anchor
+          if (path.includes('/reels') || path.includes('/explore')) {
+            setTimeout(() => handleReturnToMessages(), 0);
             return false;
           }
 
-          // 3. Strict Reel overlay isolation guard
+          // Strict Reel overlay isolation guard
           if (path.includes('/reel/') || path.includes('/p/')) {
             const reelId = extractReelId(url);
             if (!activeTargetReelIdRef.current) {
               activeTargetReelIdRef.current = reelId;
               return true;
             } else if (reelId && reelId !== activeTargetReelIdRef.current) {
-              // User or Instagram attempted to swipe to a 2nd reel -> intercept and return to messages
-              handleReturnToMessages();
+              // Intercept attempt to swipe to a 2nd reel
+              setTimeout(() => handleReturnToMessages(), 0);
               return false;
             }
           }
@@ -805,7 +809,7 @@ function MainScreen() {
         onNavigationStateChange={(navState) => {
           setCanGoBack(navState.canGoBack);
           const currentUrl = navState.url || '';
-          const path = currentUrl.toLowerCase();
+          const path = (currentUrl.split('?')[0] || '').toLowerCase();
 
           if (path.includes('/direct/')) {
             lastChatUrlRef.current = currentUrl;
@@ -814,11 +818,11 @@ function MainScreen() {
             const reelId = extractReelId(currentUrl);
             if (!activeTargetReelIdRef.current) {
               activeTargetReelIdRef.current = reelId;
-            } else if (reelId && reelId !== activeTargetReelIdRef.current) {
-              handleReturnToMessages();
+            } else if (reelId && activeTargetReelIdRef.current && reelId !== activeTargetReelIdRef.current) {
+              setTimeout(() => handleReturnToMessages(), 0);
             }
-          } else if (path.includes('/reels/') || path.includes('/explore/')) {
-            handleReturnToMessages();
+          } else if (activeTargetReelIdRef.current && (path.includes('/reels') || path.includes('/explore'))) {
+            setTimeout(() => handleReturnToMessages(), 0);
           }
         }}
         onMessage={onMessage}

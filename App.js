@@ -1298,7 +1298,7 @@ function MainScreen() {
       <WebView
         ref={webViewRef}
         source={{ uri: 'https://www.instagram.com/direct/inbox/' }}
-        style={styles.webview}
+        style={[styles.webview, { flex: 1, width: '100%', height: '100%' }]}
         androidLayerType="hardware"
         renderToHardwareTextureAndroid={true}
         cacheEnabled={true}
@@ -1312,7 +1312,7 @@ function MainScreen() {
         thirdPartyCookiesEnabled={true}
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
-        scalesPageToFit={false}
+        scalesPageToFit={true}
         textZoom={100}
         automaticallyAdjustContentInsets={false}
         originWhitelist={['*']}

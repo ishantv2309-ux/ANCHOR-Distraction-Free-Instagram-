@@ -185,6 +185,65 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
         let cssShieldSource = """
         (function() {
+            // Force strict viewport meta tag
+            let meta = document.querySelector('meta[name="viewport"]');
+            if (!meta) {
+                meta = document.createElement('meta');
+                meta.name = 'viewport';
+                if (document.head) document.head.appendChild(meta);
+            }
+            if (meta) {
+                meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
+            }
+
+            function injectResponsiveReelCSS() {
+                if (document.getElementById('anchor-reel-ui-fix')) return;
+                const style = document.createElement('style');
+                style.id = 'anchor-reel-ui-fix';
+                style.innerHTML = `
+                    /* Force body and root containers to respect mobile width */
+                    html, body, div[id^="mount_0_0_"], #mount_0_0_*, #react-root {
+                        width: 100% !important;
+                        max-width: 100vw !important;
+                        height: 100% !important;
+                        overflow-x: hidden !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+
+                    /* Contain Reel video viewports and modal overlays within screen dimensions */
+                    div[role="dialog"], 
+                    section, 
+                    main, 
+                    article, 
+                    div:has(> video) {
+                        width: 100% !important;
+                        max-width: 100vw !important;
+                        height: 100% !important;
+                        max-height: 100vh !important;
+                        box-sizing: border-box !important;
+                        margin: 0 auto !important;
+                    }
+
+                    /* Force Reels video element to fit completely inside viewport without cropping */
+                    video {
+                        object-fit: contain !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                        max-width: 100vw !important;
+                        max-height: 100vh !important;
+                    }
+
+                    /* Keep controls and interaction buttons within screen bounds */
+                    div[style*="bottom"] {
+                        max-width: 100vw !important;
+                        box-sizing: border-box !important;
+                    }
+                `;
+                (document.head || document.documentElement).appendChild(style);
+            }
+            injectResponsiveReelCSS();
+
             function injectShield() {
                 if (document.getElementById('anchor-shield-style')) return;
                 const style = document.createElement('style');
@@ -252,6 +311,66 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
         let scriptSource = """
         (function() {
+            // 1. Force strict viewport Meta Tag for exact device scaling
+            let meta = document.querySelector('meta[name="viewport"]');
+            if (!meta) {
+                meta = document.createElement('meta');
+                meta.name = 'viewport';
+                if (document.head) document.head.appendChild(meta);
+            }
+            if (meta) {
+                meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
+            }
+
+            // 2. Inject CSS rules to contain Reel video bounds and prevent edge cropping
+            const injectResponsiveReelCSS = () => {
+                if (document.getElementById('anchor-reel-ui-fix')) return;
+                const style = document.createElement('style');
+                style.id = 'anchor-reel-ui-fix';
+                style.innerHTML = `
+                    /* Force body and root containers to respect mobile width */
+                    html, body, div[id^="mount_0_0_"], #mount_0_0_*, #react-root {
+                        width: 100% !important;
+                        max-width: 100vw !important;
+                        height: 100% !important;
+                        overflow-x: hidden !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+
+                    /* Contain Reel video viewports and modal overlays within screen dimensions */
+                    div[role="dialog"], 
+                    section, 
+                    main, 
+                    article, 
+                    div:has(> video) {
+                        width: 100% !important;
+                        max-width: 100vw !important;
+                        height: 100% !important;
+                        max-height: 100vh !important;
+                        box-sizing: border-box !important;
+                        margin: 0 auto !important;
+                    }
+
+                    /* Force Reels video element to fit completely inside viewport without cropping */
+                    video {
+                        object-fit: contain !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                        max-width: 100vw !important;
+                        max-height: 100vh !important;
+                    }
+
+                    /* Keep controls and interaction buttons within screen bounds */
+                    div[style*="bottom"] {
+                        max-width: 100vw !important;
+                        box-sizing: border-box !important;
+                    }
+                `;
+                (document.head || document.documentElement).appendChild(style);
+            };
+            injectResponsiveReelCSS();
+
             // Re-apply shield if dynamically removed
             const style = document.createElement('style');
             style.innerHTML = `
@@ -644,6 +763,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
                 hideBottomNavs();
                 detectUsername();
+                injectResponsiveReelCSS();
                 applyReelIsolation();
                 applyReelStyles();
                 enforceSingleReelDOM();

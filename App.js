@@ -386,18 +386,58 @@ const INJECTED_JAVASCRIPT = `
       }
     }
 
+    function isAllowedUtilityRoute() {
+      const h = (window.location.hostname || '').toLowerCase();
+      const p = (window.location.pathname || '').toLowerCase();
+      const u = (window.location.href || '').toLowerCase();
+
+      // Meta Accounts Center domains or URLs
+      if (h.includes('accountscenter') || u.includes('accountscenter') || h.includes('meta.com')) {
+        return true;
+      }
+
+      // Settings, Accounts, Profile, Privacy, Security, Legal, Help, About
+      if (
+        p.startsWith('/accounts') ||
+        p.startsWith('/settings') ||
+        p.startsWith('/privacy') ||
+        p.startsWith('/security') ||
+        p.startsWith('/legal') ||
+        p.startsWith('/help') ||
+        p.startsWith('/about') ||
+        u.includes('account_center')
+      ) {
+        return true;
+      }
+
+      // Active utility tabs in Anchor
+      if (
+        window.__ANCHOR_ACTIVE_TAB__ === 'settings' ||
+        window.__ANCHOR_ACTIVE_TAB__ === 'profile' ||
+        window.__ANCHOR_ACTIVE_TAB__ === 'activity' ||
+        window.location.search.includes('activity=1')
+      ) {
+        return true;
+      }
+
+      return false;
+    }
+
     // 7. Route Enforcement (Keep user on distraction-free pages)
     function enforceInboxRoute() {
-      if (window.__ANCHOR_ACTIVE_TAB__ === 'activity' || window.location.search.includes('activity=1')) {
-        return; // Allow viewing activity notifications
+      if (isAllowedUtilityRoute()) {
+        return; // Full access to Accounts Center, Settings, Profile, Privacy, Activity
       }
-      const path = window.location.pathname;
-      if (path === '/' || path === '/#' || path === '' || path.startsWith('/reels') || path.startsWith('/explore')) {
+      const host = (window.location.hostname || '').toLowerCase();
+      const path = (window.location.pathname || '').toLowerCase();
+
+      // Only redirect if on Instagram main home feed or infinite explore feed
+      const isInstagramMain = host.includes('instagram.com') && !host.includes('accountscenter');
+      if (isInstagramMain && (path === '/' || path === '/#' || path === '' || path === '/explore' || path === '/explore/')) {
         window.location.replace('https://www.instagram.com/direct/inbox/');
       }
     }
 
-    // 8. Strict Reel Isolation & Gesture Interception
     // 8. Strict Reel Isolation & Infinite Scroll Eradication Engine
     function extractReelIdFromUrl(url) {
       if (!url) return null;
@@ -435,7 +475,11 @@ const INJECTED_JAVASCRIPT = `
     const origPushState = history.pushState;
     history.pushState = function(state, title, url) {
       if (url) {
-        const urlStr = url.toString();
+        const urlStr = url.toString().toLowerCase();
+        if (urlStr.includes('accountscenter') || urlStr.includes('/accounts') || urlStr.includes('/settings')) {
+          activeIsolatedReelId = null;
+          return origPushState.apply(this, arguments);
+        }
         const reelId = extractReelIdFromUrl(urlStr);
         if (reelId) {
           if (!activeIsolatedReelId) {
@@ -455,7 +499,11 @@ const INJECTED_JAVASCRIPT = `
     const origReplaceState = history.replaceState;
     history.replaceState = function(state, title, url) {
       if (url) {
-        const urlStr = url.toString();
+        const urlStr = url.toString().toLowerCase();
+        if (urlStr.includes('accountscenter') || urlStr.includes('/accounts') || urlStr.includes('/settings')) {
+          activeIsolatedReelId = null;
+          return origReplaceState.apply(this, arguments);
+        }
         const reelId = extractReelIdFromUrl(urlStr);
         if (reelId) {
           if (!activeIsolatedReelId) {
@@ -944,10 +992,22 @@ function MainScreen() {
         }}
         onShouldStartLoadWithRequest={(request) => {
           const url = request.url || '';
+          const urlLower = url.toLowerCase();
           const path = (url.split('?')[0] || '').toLowerCase();
 
-          // Always allow authentication, login challenges, API, and direct messages
-          if (path.includes('/accounts/') || path.includes('/direct/') || path.includes('/api/')) {
+          // 1. Always allow Meta Accounts Center, settings, accounts, privacy, auth, API, and direct messages
+          if (
+            urlLower.includes('accountscenter') ||
+            urlLower.includes('meta.com') ||
+            path.includes('/accounts') ||
+            path.includes('/settings') ||
+            path.includes('/privacy') ||
+            path.includes('/security') ||
+            path.includes('/help') ||
+            path.includes('/about') ||
+            path.includes('/direct/') ||
+            path.includes('/api/')
+          ) {
             if (path.includes('/direct/')) {
               lastChatUrlRef.current = url;
             }
@@ -955,7 +1015,7 @@ function MainScreen() {
             return true;
           }
 
-          // Strict Reel overlay isolation guard (matches /reel/<id>/, /reels/<id>/, and /p/<id>/)
+          // 2. Strict Reel overlay isolation guard (matches /reel/<id>/, /reels/<id>/, and /p/<id>/)
           const reelId = extractReelId(url);
           if (reelId) {
             if (!activeTargetReelIdRef.current) {
@@ -969,7 +1029,7 @@ function MainScreen() {
             return true;
           }
 
-          // Plural reels feed (without a specific reel id) or explore is blocked in Anchor
+          // 3. Plural reels feed (without a specific reel id) or explore is blocked in Anchor
           if (path.includes('/reels') || path.includes('/explore')) {
             setTimeout(() => handleReturnToMessages(), 0);
             return false;
@@ -980,22 +1040,37 @@ function MainScreen() {
         onNavigationStateChange={(navState) => {
           setCanGoBack(navState.canGoBack);
           const currentUrl = navState.url || '';
+          const urlLower = currentUrl.toLowerCase();
           const path = (currentUrl.split('?')[0] || '').toLowerCase();
 
           if (path.includes('/direct/')) {
             lastChatUrlRef.current = currentUrl;
             activeTargetReelIdRef.current = null;
-          } else {
-            const reelId = extractReelId(currentUrl);
-            if (reelId) {
-              if (!activeTargetReelIdRef.current) {
-                activeTargetReelIdRef.current = reelId;
-              } else if (reelId !== activeTargetReelIdRef.current) {
-                setTimeout(() => handleReturnToMessages(), 0);
-              }
-            } else if (activeTargetReelIdRef.current && (path.includes('/reels') || path.includes('/explore'))) {
+            return;
+          }
+
+          // Accounts Center, Settings, Privacy, Help
+          if (
+            urlLower.includes('accountscenter') ||
+            urlLower.includes('meta.com') ||
+            path.includes('/accounts') ||
+            path.includes('/settings') ||
+            path.includes('/privacy') ||
+            path.includes('/security')
+          ) {
+            activeTargetReelIdRef.current = null;
+            return;
+          }
+
+          const reelId = extractReelId(currentUrl);
+          if (reelId) {
+            if (!activeTargetReelIdRef.current) {
+              activeTargetReelIdRef.current = reelId;
+            } else if (reelId !== activeTargetReelIdRef.current) {
               setTimeout(() => handleReturnToMessages(), 0);
             }
+          } else if (activeTargetReelIdRef.current && (path.includes('/reels') || path.includes('/explore'))) {
+            setTimeout(() => handleReturnToMessages(), 0);
           }
         }}
         onMessage={onMessage}

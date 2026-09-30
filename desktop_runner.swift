@@ -325,11 +325,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                     const href = (clickable.getAttribute('href') || '').toLowerCase();
                     const aria = (clickable.getAttribute('aria-label') || '').toLowerCase();
 
-                    const isReel = href.includes('/reels') || aria.includes('reels') || aria.includes('clips');
-                    const isExplore = href.includes('/explore') || aria.includes('explore');
-                    const isHome = ((href === '/' || href === '/#' || href === '') || aria === 'home') && !href.includes('/direct/');
+                    // Never intercept clicks on settings, accounts, or accounts center
+                    if (href.includes('accountscenter') || href.includes('/accounts') || href.includes('/settings') || href.includes('/privacy')) {
+                        return;
+                    }
 
-                    if (isReel || isExplore || isHome) {
+                    const isReel = href.includes('/reels') || (aria.includes('reels') && !aria.includes('audio'));
+                    const isExplore = href.includes('/explore') || aria.includes('explore');
+                    const isExplicitHomeLink = (href === '/' || href === '/#') && aria === 'home';
+
+                    if (isReel || isExplore || isExplicitHomeLink) {
                         e.preventDefault();
                         e.stopPropagation();
                         e.stopImmediatePropagation();
@@ -479,36 +484,58 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                 }
             }
 
+            function isAllowedUtilityRoute() {
+                const h = (window.location.hostname || '').toLowerCase();
+                const p = (window.location.pathname || '').toLowerCase();
+                const u = (window.location.href || '').toLowerCase();
+
+                // Meta Accounts Center domains or URLs
+                if (h.includes('accountscenter') || u.includes('accountscenter') || h.includes('meta.com')) {
+                    return true;
+                }
+
+                // Settings, Accounts, Profile, Privacy, Security, Legal, Help, About
+                if (
+                    p.startsWith('/accounts') ||
+                    p.startsWith('/settings') ||
+                    p.startsWith('/privacy') ||
+                    p.startsWith('/security') ||
+                    p.startsWith('/legal') ||
+                    p.startsWith('/help') ||
+                    p.startsWith('/about') ||
+                    u.includes('account_center')
+                ) {
+                    return true;
+                }
+
+                // Active utility tabs in Anchor
+                if (
+                    window.__ANCHOR_ACTIVE_TAB__ === 'settings' ||
+                    window.__ANCHOR_ACTIVE_TAB__ === 'profile' ||
+                    window.__ANCHOR_ACTIVE_TAB__ === 'activity' ||
+                    window.location.search.includes('activity=1')
+                ) {
+                    return true;
+                }
+
+                return false;
+            }
+
             function enforceRules() {
-                const p = window.location.pathname;
-                // Allow authentication & settings & profile views
-                if (p.includes('/accounts/login') || p.includes('/challenge') || p.includes('/two_factor')) return;
-
-                // Intercept Root Home, Plural Reels, and Explore
-                const isReels = p.startsWith('/reels');
-                const isExplore = p === '/explore' || p.startsWith('/explore');
-                const isHome = p === '/' || p === '/#' || p === '';
-
-                if (window.__ANCHOR_ACTIVE_TAB__ === 'activity' || window.location.search.includes('activity=1')) {
-                    const headings = document.querySelectorAll('h1, h2, h3, header, span');
-                    let isNotifOpen = false;
-                    for (let i = 0; i < headings.length; i++) {
-                        if ((headings[i].innerText || '').toLowerCase().includes('notification')) {
-                            isNotifOpen = true;
-                            break;
-                        }
-                    }
-                    if (!isNotifOpen && !window.__ACTIVITY_TRIGGERED__) {
-                        window.__ACTIVITY_TRIGGERED__ = true;
-                        const heart = document.querySelector('svg[aria-label*="Activity" i], svg[aria-label*="Notification" i], a[href*="/activity"]')?.closest('a, button, div[role="button"]');
-                        if (heart) {
-                            heart.click();
-                        }
-                    }
+                if (isAllowedUtilityRoute()) {
+                    hideBottomNavs();
+                    detectUsername();
                     return;
                 }
 
-                if (isReels || isExplore || isHome) {
+                const host = (window.location.hostname || '').toLowerCase();
+                const p = (window.location.pathname || '').toLowerCase();
+
+                const isInstagramMain = host.includes('instagram.com') && !host.includes('accountscenter');
+                const isHome = isInstagramMain && (p === '/' || p === '/#' || p === '');
+                const isExplore = p === '/explore' || p.startsWith('/explore');
+
+                if (isExplore || isHome) {
                     window.location.replace('https://www.instagram.com/direct/inbox/');
                     return;
                 }
@@ -553,7 +580,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
             const origPushState = history.pushState;
             history.pushState = function(state, title, url) {
                 if (url) {
-                    const urlStr = url.toString();
+                    const urlStr = url.toString().toLowerCase();
+                    if (urlStr.includes('accountscenter') || urlStr.includes('/accounts') || urlStr.includes('/settings')) {
+                        activeIsolatedReelId = null;
+                        return origPushState.apply(this, arguments);
+                    }
                     const reelId = extractReelIdFromUrl(urlStr);
                     if (reelId) {
                         if (!activeIsolatedReelId) {
@@ -573,7 +604,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
             const origReplaceState = history.replaceState;
             history.replaceState = function(state, title, url) {
                 if (url) {
-                    const urlStr = url.toString();
+                    const urlStr = url.toString().toLowerCase();
+                    if (urlStr.includes('accountscenter') || urlStr.includes('/accounts') || urlStr.includes('/settings')) {
+                        activeIsolatedReelId = null;
+                        return origReplaceState.apply(this, arguments);
+                    }
                     const reelId = extractReelIdFromUrl(urlStr);
                     if (reelId) {
                         if (!activeIsolatedReelId) {
@@ -874,10 +909,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
             return
         }
 
+        let host = (url.host ?? "").lowercased()
         let path = url.path.lowercased()
+        let full = url.absoluteString.lowercased()
 
-        // 1. Direct message navigation tracking & allow auth/api
-        if path.contains("/direct/") || path.contains("/accounts/") || path.contains("/api/") {
+        // 1. Direct message navigation tracking & allow accounts center / settings / auth / api
+        if host.contains("accountscenter") ||
+           full.contains("accountscenter") ||
+           host.contains("meta.com") ||
+           path.contains("/accounts") ||
+           path.contains("/settings") ||
+           path.contains("/privacy") ||
+           path.contains("/security") ||
+           path.contains("/help") ||
+           path.contains("/about") ||
+           path.contains("/direct/") ||
+           path.contains("/api/") {
             if path.contains("/direct/") {
                 self.lastChatUrl = url.absoluteString
             }

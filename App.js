@@ -48,7 +48,9 @@ const INJECTED_CSS_AND_PRELOAD = `
         /* 5. Strict Reel Overlay Isolation & Scroll Lock */
         html.anchor-reel-isolated,
         html.anchor-reel-isolated body,
-        body.anchor-reel-isolated {
+        body.anchor-reel-isolated,
+        body:has(a[href*="/reel/"]), 
+        body:has(a[href*="/reels/"]) {
           overflow: hidden !important;
           touch-action: none !important;
           overscroll-behavior: none !important;
@@ -71,6 +73,11 @@ const INJECTED_CSS_AND_PRELOAD = `
           scroll-snap-type: none !important;
         }
 
+        /* Hide navigation arrow buttons pointing to next/prev reels */
+        button[aria-label="Next Reel"],
+        button[aria-label="Previous Reel"],
+        div[role="button"]:has(svg[aria-label="Down chevron"]),
+        div[role="button"]:has(svg[aria-label="Up chevron"]),
         .anchor-reel-isolated div[data-testid="suggested-users"],
         .anchor-reel-isolated section:has(a[href*="/reels/"]),
         .anchor-reel-isolated a[href*="/reels/"],
@@ -517,75 +524,89 @@ const INJECTED_JAVASCRIPT = `
       return origReplaceState.apply(this, arguments);
     };
 
-    // Early Capture Gesture & Pointer Interception
-    let touchStartY = 0;
-    let touchStartX = 0;
-    let isTrackingTouch = false;
+    // 1. Prevent vertical scroll / swipe events on Reel pages
+    let startY = 0;
 
-    function onTouchStart(e) {
-      if (isReelOverlay()) {
-        const t = e.touches ? e.touches[0] : e;
-        if (t) {
-          touchStartY = t.clientY;
-          touchStartX = t.clientX;
-          isTrackingTouch = true;
-        }
+    document.addEventListener('touchstart', (e) => {
+      if (e.touches && e.touches[0]) {
+        startY = e.touches[0].clientY;
       }
-    }
+    }, { passive: false });
 
-    function onTouchMove(e) {
-      if (isReelOverlay() && isTrackingTouch) {
-        const t = e.touches ? e.touches[0] : e;
-        if (t) {
-          const dy = Math.abs(t.clientY - touchStartY);
-          const dx = Math.abs(t.clientX - touchStartX);
-          // ANY vertical scroll gesture is immediately killed
-          if (dy > 3 || dy >= dx) {
+    document.addEventListener('touchmove', (e) => {
+      const isReelPage = window.location.pathname.includes('/reel/') || 
+                         window.location.pathname.includes('/reels/') ||
+                         window.location.pathname.startsWith('/reel') ||
+                         window.location.pathname.startsWith('/p/');
+      if (isReelPage) {
+        if (e.touches && e.touches[0]) {
+          const currentY = e.touches[0].clientY;
+          const diffY = Math.abs(currentY - startY);
+          
+          // Block vertical swipes exceeding 5px to prevent advancing to the next Reel
+          if (diffY > 5) {
             if (e.cancelable) e.preventDefault();
             e.stopPropagation();
-            e.stopImmediatePropagation();
-            return false;
           }
         }
       }
-    }
+    }, { passive: false });
 
-    function onTouchEnd() {
-      isTrackingTouch = false;
-    }
-
-    window.addEventListener('touchstart', onTouchStart, { capture: true, passive: false });
-    window.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
-    window.addEventListener('touchend', onTouchEnd, { capture: true, passive: false });
-    window.addEventListener('touchcancel', onTouchEnd, { capture: true, passive: false });
-
-    window.addEventListener('pointerdown', onTouchStart, { capture: true, passive: false });
-    window.addEventListener('pointermove', onTouchMove, { capture: true, passive: false });
-    window.addEventListener('pointerup', onTouchEnd, { capture: true, passive: false });
-    window.addEventListener('pointercancel', onTouchEnd, { capture: true, passive: false });
-
-    window.addEventListener('wheel', function(e) {
-      if (isReelOverlay()) {
+    // 2. Disable mouse wheel / trackpad scrolling on desktop/emulator previews
+    window.addEventListener('wheel', (e) => {
+      const isReelPage = window.location.pathname.includes('/reel/') || 
+                         window.location.pathname.includes('/reels/') ||
+                         window.location.pathname.startsWith('/reel') ||
+                         window.location.pathname.startsWith('/p/');
+      if (isReelPage) {
         if (e.cancelable) e.preventDefault();
         e.stopPropagation();
-        e.stopImmediatePropagation();
-        return false;
       }
-    }, { capture: true, passive: false });
+    }, { passive: false });
 
-    window.addEventListener('keydown', function(e) {
-      if (isReelOverlay() && ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', ' '].includes(e.key)) {
+    // Trap ArrowUp / ArrowDown / PageUp / PageDown keys on reel pages
+    window.addEventListener('keydown', (e) => {
+      const isReelPage = window.location.pathname.includes('/reel/') || 
+                         window.location.pathname.includes('/reels/') ||
+                         window.location.pathname.startsWith('/reel') ||
+                         window.location.pathname.startsWith('/p/');
+      if (isReelPage && ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', ' '].includes(e.key)) {
         if (e.target && !['input', 'textarea'].includes(e.target.tagName.toLowerCase())) {
           e.preventDefault();
           e.stopPropagation();
-          return false;
         }
       }
-    }, { capture: true });
+    }, { passive: false });
+
+    // 3. Inject CSS rules to hide next/previous reel navigation arrows if present
+    function injectReelLockStyles() {
+      if (!document.getElementById('anchor-reel-lock-styles')) {
+        const style = document.createElement('style');
+        style.id = 'anchor-reel-lock-styles';
+        style.innerHTML = \`
+          /* Lock vertical overflow on Reel container */
+          body:has(a[href*="/reel/"]), body:has(a[href*="/reels/"]) {
+            overflow: hidden !important;
+            touch-action: none !important;
+          }
+          
+          /* Hide navigation arrow buttons pointing to next/prev reels */
+          button[aria-label="Next Reel"],
+          button[aria-label="Previous Reel"],
+          div[role="button"]:has(svg[aria-label="Down chevron"]),
+          div[role="button"]:has(svg[aria-label="Up chevron"]) {
+            display: none !important;
+          }
+        \`;
+        (document.head || document.documentElement).appendChild(style);
+      }
+    }
+    injectReelLockStyles();
 
     // Scroll Position Hard Clamping
     window.addEventListener('scroll', function() {
-      if (isReelOverlay()) {
+      const isReelPage = window.location.pathname.includes('/reel/') || window.location.pathname.includes('/reels/');
+      if (isReelPage) {
         if (window.scrollY !== 0 || window.pageYOffset !== 0) {
           window.scrollTo(0, 0);
         }
@@ -593,7 +614,8 @@ const INJECTED_JAVASCRIPT = `
     }, { capture: true, passive: false });
 
     document.addEventListener('scroll', function(e) {
-      if (isReelOverlay() && e.target && e.target !== document) {
+      const isReelPage = window.location.pathname.includes('/reel/') || window.location.pathname.includes('/reels/');
+      if (isReelPage && e.target && e.target !== document) {
         if (e.target.scrollTop && e.target.scrollTop !== 0) {
           e.target.scrollTop = 0;
         }
@@ -607,6 +629,7 @@ const INJECTED_JAVASCRIPT = `
       const docBody = document.body;
 
       if (isReel) {
+        injectReelLockStyles();
         if (!activeIsolatedReelId) {
           activeIsolatedReelId = extractReelIdFromUrl(window.location.href);
         }

@@ -985,6 +985,8 @@ function MainScreen() {
   const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
   const activeTargetReelIdRef = useRef(null);
+  const activeReelUrlRef = useRef(null);
+  const [activeReelUrl, setActiveReelUrl] = useState(null);
   const lastChatUrlRef = useRef('https://www.instagram.com/direct/inbox/');
   const [activeTab, setActiveTab] = useState('messages');
   const [loggedInUser, setLoggedInUser] = useState(null);
@@ -1003,6 +1005,8 @@ function MainScreen() {
 
   const handleReturnToMessages = () => {
     activeTargetReelIdRef.current = null;
+    activeReelUrlRef.current = null;
+    setActiveReelUrl(null);
     setActiveTab('messages');
     if (!webViewRef.current) return;
     const returnUrl = lastChatUrlRef.current || 'https://www.instagram.com/direct/inbox/';
@@ -1033,7 +1037,7 @@ function MainScreen() {
   };
 
   const handleGoBack = () => {
-    if (activeTargetReelIdRef.current) {
+    if (activeTargetReelIdRef.current || activeReelUrlRef.current) {
       handleReturnToMessages();
       return;
     }
@@ -1073,6 +1077,8 @@ function MainScreen() {
   const handleTabPress = (tab) => {
     setActiveTab(tab);
     activeTargetReelIdRef.current = null;
+    activeReelUrlRef.current = null;
+    setActiveReelUrl(null);
     if (!webViewRef.current) return;
 
     if (tab === 'activity') {
@@ -1231,12 +1237,17 @@ function MainScreen() {
           // 2. Strict Reel overlay isolation guard (matches /reel/<id>/, /reels/<id>/, and /p/<id>/)
           const reelId = extractReelId(url);
           if (reelId) {
-            if (!activeTargetReelIdRef.current) {
+            const lockedUrl = activeReelUrlRef.current;
+            if (!lockedUrl) {
+              activeReelUrlRef.current = url;
+              setActiveReelUrl(url);
               activeTargetReelIdRef.current = reelId;
               return true;
-            } else if (reelId !== activeTargetReelIdRef.current) {
-              // Intercept attempt to swipe/navigate to a second reel -> return to messages
-              setTimeout(() => handleReturnToMessages(), 0);
+            } else if (lockedUrl && url !== lockedUrl) {
+              // Intercept attempt to swipe/navigate to a second reel -> force reload back to target reel
+              if (webViewRef.current) {
+                webViewRef.current.injectJavaScript(`window.location.href = "${lockedUrl}"; true;`);
+              }
               return false;
             }
             return true;
@@ -1252,13 +1263,16 @@ function MainScreen() {
         }}
         onNavigationStateChange={(navState) => {
           setCanGoBack(navState.canGoBack);
-          const currentUrl = navState.url || '';
+          const { url } = navState;
+          const currentUrl = url || '';
           const urlLower = currentUrl.toLowerCase();
           const path = (currentUrl.split('?')[0] || '').toLowerCase();
 
           if (path.includes('/direct/')) {
             lastChatUrlRef.current = currentUrl;
             activeTargetReelIdRef.current = null;
+            activeReelUrlRef.current = null;
+            setActiveReelUrl(null);
             return;
           }
 
@@ -1272,18 +1286,31 @@ function MainScreen() {
             path.includes('/security')
           ) {
             activeTargetReelIdRef.current = null;
+            activeReelUrlRef.current = null;
+            setActiveReelUrl(null);
             return;
           }
 
-          const reelId = extractReelId(currentUrl);
-          if (reelId) {
-            if (!activeTargetReelIdRef.current) {
-              activeTargetReelIdRef.current = reelId;
-            } else if (reelId !== activeTargetReelIdRef.current) {
-              setTimeout(() => handleReturnToMessages(), 0);
+          // Detect when a specific Reel link is opened from DMs
+          if (currentUrl.includes('/reel/') || currentUrl.includes('/reels/')) {
+            const lockedUrl = activeReelUrlRef.current;
+            if (!lockedUrl) {
+              activeReelUrlRef.current = currentUrl;
+              setActiveReelUrl(currentUrl); // Lock onto the exact single reel URL
+              activeTargetReelIdRef.current = extractReelId(currentUrl);
+            } else if (lockedUrl && currentUrl !== lockedUrl) {
+              // If Instagram attempts to route to a NEXT Reel via swipe, force reload back to the target reel
+              if (webViewRef.current) {
+                webViewRef.current.injectJavaScript(`window.location.href = "${lockedUrl}"; true;`);
+              }
             }
-          } else if (activeTargetReelIdRef.current && (path.includes('/reels') || path.includes('/explore'))) {
-            setTimeout(() => handleReturnToMessages(), 0);
+          } else {
+            // Reset tracker when leaving Reels back to DMs or Profile
+            if (activeReelUrlRef.current) {
+              activeReelUrlRef.current = null;
+              setActiveReelUrl(null);
+              activeTargetReelIdRef.current = null;
+            }
           }
         }}
         onMessage={onMessage}

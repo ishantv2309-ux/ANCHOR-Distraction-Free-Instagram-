@@ -8,6 +8,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     var titleLabel: NSTextField!
     var detectedUsername: String? = UserDefaults.standard.string(forKey: "anchor_saved_username")
     var activeTargetReelId: String? = nil
+    var activeReelUrl: String? = nil
     var lastChatUrl: String = "https://www.instagram.com/direct/inbox/"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -1036,6 +1037,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
     func returnToMessages() {
         self.activeTargetReelId = nil
+        self.activeReelUrl = nil
         self.currentTab = "messages"
         let targetUrl = self.lastChatUrl.isEmpty ? "https://www.instagram.com/direct/inbox/" : self.lastChatUrl
         if let url = URL(string: targetUrl) {
@@ -1075,23 +1077,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                 self.lastChatUrl = url.absoluteString
             }
             self.activeTargetReelId = nil
+            self.activeReelUrl = nil
             decisionHandler(.allow)
             return
         }
 
         // 2. Strict Reel overlay isolation guard (matches /reel/<id>/, /reels/<id>/, and /p/<id>/)
         if let reelId = extractReelId(from: url) {
-            if self.activeTargetReelId == nil {
-                self.activeTargetReelId = reelId
-                decisionHandler(.allow)
-                return
-            } else if reelId != self.activeTargetReelId {
-                // Swiping or navigating to a 2nd reel is strictly blocked
-                decisionHandler(.cancel)
-                DispatchQueue.main.async { [weak self] in
-                    self?.returnToMessages()
+            let fullUrl = url.absoluteString
+            if let locked = self.activeReelUrl {
+                if fullUrl != locked {
+                    decisionHandler(.cancel)
+                    DispatchQueue.main.async { [weak self] in
+                        self?.webView.evaluateJavaScript("window.location.href = '\(locked)';")
+                    }
+                    return
                 }
-                return
+            } else {
+                self.activeReelUrl = fullUrl
+                self.activeTargetReelId = reelId
             }
             decisionHandler(.allow)
             return

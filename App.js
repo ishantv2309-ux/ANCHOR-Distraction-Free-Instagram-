@@ -35,7 +35,39 @@ const INJECTED_CSS_AND_PRELOAD = `
         a[href*="android-app"],
         a[href*="intent://"],
 
-        /* 4. Eradicate Suggested for you recommendations on profile */
+        /* 4. Eradicate Instagram Web Bottom Navigation Tray and Message Icon Everywhere */
+        div[role="tablist"]:has(a[href*="/direct/"]),
+        div[role="tablist"]:has(svg[aria-label*="Direct" i]),
+        div[role="tablist"]:has(svg[aria-label*="Messenger" i]),
+        div[role="tablist"]:has(a[href="/"]),
+        div[role="tablist"]:has(svg[aria-label*="Home" i]),
+        div[role="tablist"]:has(a[href*="/reels"]),
+        div[role="tablist"]:has(a[href*="/explore"]),
+        div[role="tablist"] a[href*="/direct/inbox"],
+        div[role="tablist"] svg[aria-label*="Direct" i],
+        div[role="tablist"] svg[aria-label*="Messenger" i],
+        div[role="tablist"] [role="tab"]:has(svg[aria-label*="Direct" i]),
+        div[role="tablist"] [role="tab"]:has(svg[aria-label*="Messenger" i]),
+        div[role="tablist"] [role="tab"]:has(a[href*="/direct/"]),
+        div[role="tablist"] [role="tab"]:has(img[alt*="profile picture" i]),
+        nav:has(a[href*="/direct/inbox"]),
+        nav:has(svg[aria-label*="Direct" i]),
+        nav:has(svg[aria-label*="Messenger" i]),
+        footer:has(a[href*="/direct/inbox"]),
+        footer:has(svg[aria-label*="Direct" i]),
+        footer[role="contentinfo"],
+        div:has(> a[href*="/direct/inbox"]),
+        div:has(> * > a[href*="/direct/inbox"]),
+        div:has(> * > * > a[href*="/direct/inbox"]),
+        div:has(> a[href="/direct/inbox/"]),
+        div:has(> * > a[href="/direct/inbox/"]),
+        div:has(> * > * > a[href="/direct/inbox/"]),
+        div[data-testid="bottom-nav"],
+        div[data-testid="mobile-nav-bar"],
+        div[data-testid="navigation-bar"],
+        nav[style*="bottom"],
+
+        /* 5. Eradicate Suggested for you recommendations on profile */
         div[data-testid="suggested-users"] {
           display: none !important;
           visibility: hidden !important;
@@ -43,6 +75,7 @@ const INJECTED_CSS_AND_PRELOAD = `
           height: 0 !important;
           max-height: 0 !important;
           overflow: hidden !important;
+          opacity: 0 !important;
         }
 
         /* 5. Strict Reel Overlay Isolation & Scroll Lock */
@@ -127,6 +160,39 @@ const INJECTED_JAVASCRIPT = `
           a[href*="apps.apple.com"],
           a[href*="android-app"],
           a[href*="intent://"],
+          
+          /* Eradicate Instagram Web Bottom Navigation Tray and Message Icon Everywhere */
+          div[role="tablist"]:has(a[href*="/direct/"]),
+          div[role="tablist"]:has(svg[aria-label*="Direct" i]),
+          div[role="tablist"]:has(svg[aria-label*="Messenger" i]),
+          div[role="tablist"]:has(a[href="/"]),
+          div[role="tablist"]:has(svg[aria-label*="Home" i]),
+          div[role="tablist"]:has(a[href*="/reels"]),
+          div[role="tablist"]:has(a[href*="/explore"]),
+          div[role="tablist"] a[href*="/direct/inbox"],
+          div[role="tablist"] svg[aria-label*="Direct" i],
+          div[role="tablist"] svg[aria-label*="Messenger" i],
+          div[role="tablist"] [role="tab"]:has(svg[aria-label*="Direct" i]),
+          div[role="tablist"] [role="tab"]:has(svg[aria-label*="Messenger" i]),
+          div[role="tablist"] [role="tab"]:has(a[href*="/direct/"]),
+          div[role="tablist"] [role="tab"]:has(img[alt*="profile picture" i]),
+          nav:has(a[href*="/direct/inbox"]),
+          nav:has(svg[aria-label*="Direct" i]),
+          nav:has(svg[aria-label*="Messenger" i]),
+          footer:has(a[href*="/direct/inbox"]),
+          footer:has(svg[aria-label*="Direct" i]),
+          footer[role="contentinfo"],
+          div:has(> a[href*="/direct/inbox"]),
+          div:has(> * > a[href*="/direct/inbox"]),
+          div:has(> * > * > a[href*="/direct/inbox"]),
+          div:has(> a[href="/direct/inbox/"]),
+          div:has(> * > a[href="/direct/inbox/"]),
+          div:has(> * > * > a[href="/direct/inbox/"]),
+          div[data-testid="bottom-nav"],
+          div[data-testid="mobile-nav-bar"],
+          div[data-testid="navigation-bar"],
+          nav[style*="bottom"],
+
           div[data-testid="suggested-users"] {
             display: none !important;
             visibility: hidden !important;
@@ -134,6 +200,7 @@ const INJECTED_JAVASCRIPT = `
             height: 0 !important;
             max-height: 0 !important;
             overflow: hidden !important;
+            opacity: 0 !important;
           }
 
           /* Reel Overlay Isolation & Scroll Lock */
@@ -332,31 +399,116 @@ const INJECTED_JAVASCRIPT = `
       }
     }
 
-    // 5. Precision Bottom Bar Eradication (Geometric Filtering Only)
+    // 5. Permanent Bottom Navigation Tray and Message Icon Eradication
     function purgeToastbar() {
       window.detectLoggedInUser();
 
       const vh = window.innerHeight;
       const vw = window.innerWidth;
-      const candidates = document.querySelectorAll('div, footer, nav, [role="navigation"], [role="tablist"]');
 
+      // 1. Direct Target: Instagram Mobile Web Bottom Navigation Tabs & Trays
+      const navTraySelectors = [
+        'div[role="tablist"]',
+        'nav[role="navigation"]',
+        'footer[role="contentinfo"]',
+        'div[data-testid="bottom-nav"]',
+        'div[data-testid="mobile-nav-bar"]',
+        'div[data-testid="navigation-bar"]',
+        'nav'
+      ];
+
+      document.querySelectorAll(navTraySelectors.join(', ')).forEach(function(el) {
+        if (el.id === 'anchor-exit-reel-btn') return;
+        if (el.querySelector('input, textarea, form, [contenteditable="true"]')) return;
+
+        const rect = el.getBoundingClientRect();
+        // Never hide the top header (top <= 65) unless it's an explicit tablist
+        if (rect.top <= 65 && rect.height <= 60 && !el.querySelector('a[href*="/direct/inbox"], svg[aria-label*="Direct" i]')) {
+          return;
+        }
+
+        // Check if this container contains bottom navigation items
+        const hasDirectTab = el.querySelector('a[href*="/direct/inbox"], svg[aria-label*="Direct" i], svg[aria-label*="Messenger" i]');
+        const hasHomeTab = el.querySelector('a[href="/"], svg[aria-label*="Home" i]');
+        const hasReelOrExploreTab = el.querySelector('a[href*="/reels"], a[href*="/explore"]');
+        const isBottomTablist = el.getAttribute('role') === 'tablist' && !el.querySelector('svg[aria-label*="Posts" i], svg[aria-label*="Grid" i], svg[aria-label*="Tagged" i]');
+        const isPositionedAtBottom = (rect.bottom >= vh - 90 || rect.top >= vh - 130) && rect.height <= 110;
+
+        if (hasDirectTab || hasHomeTab || hasReelOrExploreTab || (isBottomTablist && isPositionedAtBottom)) {
+          el.style.setProperty('display', 'none', 'important');
+          el.style.setProperty('visibility', 'hidden', 'important');
+          el.style.setProperty('pointer-events', 'none', 'important');
+          el.style.setProperty('height', '0px', 'important');
+          el.style.setProperty('max-height', '0px', 'important');
+          el.style.setProperty('overflow', 'hidden', 'important');
+
+          let parent = el.parentElement;
+          if (parent && parent !== document.body && parent !== document.documentElement) {
+            const pComp = window.getComputedStyle(parent);
+            if ((pComp.position === 'fixed' || pComp.position === 'sticky') && parent.getBoundingClientRect().height <= 110) {
+              parent.style.setProperty('display', 'none', 'important');
+              parent.style.setProperty('visibility', 'hidden', 'important');
+              parent.style.setProperty('height', '0px', 'important');
+            }
+          }
+        }
+      });
+
+      // 2. Eradicate any stand-alone Direct / Message icon & tray
+      document.querySelectorAll('svg[aria-label*="Direct" i], svg[aria-label*="Messenger" i], a[href*="/direct/inbox"]').forEach(function(el) {
+        const r = el.getBoundingClientRect();
+        // Do not touch header back buttons
+        if (r.top <= 65 && (el.getAttribute('aria-label') || '').toLowerCase().includes('back')) return;
+        if (el.closest('header')) return;
+
+        const tabParent = el.closest('[role="tab"], div[role="tablist"], nav, footer, div[data-testid*="nav"]');
+        if (tabParent && !tabParent.querySelector('input, textarea, [contenteditable="true"]')) {
+          tabParent.style.setProperty('display', 'none', 'important');
+          tabParent.style.setProperty('visibility', 'hidden', 'important');
+          tabParent.style.setProperty('pointer-events', 'none', 'important');
+          tabParent.style.setProperty('height', '0px', 'important');
+
+          const tray = tabParent.closest('div[role="tablist"], nav, footer') || tabParent.parentElement;
+          if (tray && tray !== document.body && tray.getBoundingClientRect().height <= 110) {
+            tray.style.setProperty('display', 'none', 'important');
+            tray.style.setProperty('visibility', 'hidden', 'important');
+            tray.style.setProperty('height', '0px', 'important');
+          }
+        }
+      });
+
+      // 3. Geometric Bottom Bar Eradication (catches all fixed/sticky bottom bars)
+      const candidates = document.querySelectorAll('div, footer, nav, [role="navigation"], [role="tablist"]');
       for (let i = 0; i < candidates.length; i++) {
         const el = candidates[i];
+        if (el.id === 'anchor-exit-reel-btn') continue;
         if (el.querySelector('input, textarea, form, [contenteditable="true"]')) continue;
 
         const comp = window.getComputedStyle(el);
-        if (comp.position === 'fixed' || comp.position === 'sticky') {
+        if (comp.position === 'fixed' || comp.position === 'sticky' || comp.position === 'absolute') {
           const rect = el.getBoundingClientRect();
-          if (rect.height >= 35 && rect.height <= 85 && rect.top >= vh - 95 && rect.width >= vw * 0.7) {
+          if (rect.height >= 25 && rect.height <= 110 && (rect.top >= vh - 120 || rect.bottom >= vh - 80) && rect.width >= vw * 0.4) {
             el.style.setProperty('display', 'none', 'important');
             el.style.setProperty('visibility', 'hidden', 'important');
             el.style.setProperty('pointer-events', 'none', 'important');
             el.style.setProperty('height', '0px', 'important');
+            el.style.setProperty('max-height', '0px', 'important');
           }
         }
       }
 
-      // Hide "Suggested for you" follow cards on profile
+      // 4. Remove any lingering indicator lines / pill bars at the bottom
+      document.querySelectorAll('div, span').forEach(function(el) {
+        if (el.id === 'anchor-exit-reel-btn') return;
+        const rect = el.getBoundingClientRect();
+        if (rect.width >= 15 && rect.width <= 80 && rect.height >= 2 && rect.height <= 8) {
+          if (rect.bottom >= vh - 80) {
+            el.style.setProperty('display', 'none', 'important');
+          }
+        }
+      });
+
+      // 5. Hide "Suggested for you" follow cards on profile
       document.querySelectorAll('h2, h3, span, div').forEach(function(el) {
         const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
         if (txt === 'suggested for you' || txt === 'suggestions for you') {
@@ -368,6 +520,7 @@ const INJECTED_JAVASCRIPT = `
       });
 
       if (document.body) document.body.style.setProperty('padding-bottom', '0px', 'important');
+      if (document.documentElement) document.documentElement.style.setProperty('padding-bottom', '0px', 'important');
       const mainEl = document.querySelector('main');
       if (mainEl) mainEl.style.setProperty('padding-bottom', '0px', 'important');
     }
@@ -781,6 +934,10 @@ const INJECTED_JAVASCRIPT = `
     });
 
     observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+
+    window.addEventListener('resize', purgeToastbar, { passive: true });
+    window.addEventListener('scroll', purgeToastbar, { passive: true });
+    setInterval(purgeToastbar, 400);
   })();
   true;
 `;

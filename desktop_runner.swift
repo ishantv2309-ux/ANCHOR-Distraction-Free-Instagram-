@@ -645,7 +645,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                 hideBottomNavs();
                 detectUsername();
                 applyReelIsolation();
-                injectReelLockCSS();
+                applyReelStyles();
                 enforceSingleReelDOM();
             }
 
@@ -726,76 +726,83 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                 return origReplaceState.apply(this, arguments);
             };
 
-            // 1. HARDWARE CSS LOCK ON REEL CONTAINERS
-            const injectReelLockCSS = () => {
-                if (document.getElementById('anchor-reel-hardware-lock')) return;
+            // A. Disable vertical CSS scroll-snapping globally on Reel viewports
+            const applyReelStyles = () => {
+                const isReel = window.location.pathname.includes('/reel/') || window.location.pathname.includes('/reels/');
+                const existing = document.getElementById('anchor-reel-lock-css');
+                if (!isReel) {
+                    if (existing) existing.remove();
+                    return;
+                }
+                if (existing) return;
                 const style = document.createElement('style');
-                style.id = 'anchor-reel-hardware-lock';
+                style.id = 'anchor-reel-lock-css';
                 style.innerHTML = `
-                    /* Disable vertical snapping and scrolling on reel viewports */
-                    div[role="dialog"], 
-                    section, 
-                    main, 
-                    div:has(> video),
-                    body:has(a[href*="/reel/"]), 
-                    body:has(a[href*="/reels/"]) {
-                        touch-action: pan-x !important;
-                        overscroll-behavior-y: contain !important;
+                    /* Kill scroll snap containers on reel screens */
+                    html, body, main, section, div[role="dialog"] {
                         scroll-snap-type: none !important;
+                        overscroll-behavior-y: none !important;
+                        touch-action: pan-x !important;
                     }
 
-                    /* Hide next/previous reel navigation chevrons and scroll buttons */
+                    /* Hide all swipe indicator arrows and next reel preloader containers */
                     div[role="button"]:has(svg[aria-label="Down chevron"]),
                     div[role="button"]:has(svg[aria-label="Up chevron"]),
                     button[aria-label="Next Reel"],
                     button[aria-label="Previous Reel"] {
                         display: none !important;
+                        visibility: hidden !important;
                         pointer-events: none !important;
                     }
                 `;
                 (document.head || document.documentElement).appendChild(style);
             };
-            injectReelLockCSS();
 
-            // 2. CAPTURE-PHASE TOUCH & WHEEL INTERCEPTOR
+            // B. Aggressive Capture-Phase Touch Blocker
             let startY = 0;
-
+            
             window.addEventListener('touchstart', (e) => {
-                if (e.touches && e.touches[0]) {
+                if (e.touches && e.touches.length > 0) {
                     startY = e.touches[0].clientY;
                 }
-            }, true); // Use Capture phase
+            }, { capture: true, passive: true });
 
             window.addEventListener('touchmove', (e) => {
-                const isReelPage = window.location.pathname.includes('/reel/') || 
-                                   window.location.pathname.includes('/reels/') ||
-                                   window.location.pathname.startsWith('/reel') ||
-                                   window.location.pathname.startsWith('/p/');
-                if (isReelPage && e.touches && e.touches[0]) {
+                const isReel = window.location.pathname.includes('/reel/') || window.location.pathname.includes('/reels/');
+                if (isReel && e.touches && e.touches.length > 0) {
                     const currentY = e.touches[0].clientY;
-                    const diffY = Math.abs(currentY - startY);
+                    const deltaY = Math.abs(currentY - startY);
 
-                    // If the user attempts a vertical drag over 8px on a Reel, kill the event completely
-                    if (diffY > 8) {
+                    // Trap vertical movement greater than 10px to stop swipe-down gestures completely
+                    if (deltaY > 10) {
                         e.preventDefault();
                         e.stopPropagation();
                         e.stopImmediatePropagation();
                         return false;
                     }
                 }
-            }, { passive: false, capture: true });
+            }, { capture: true, passive: false });
 
             // Block mouse/wheel scrolling for emulator/desktop previews
             window.addEventListener('wheel', (e) => {
-                const isReelPage = window.location.pathname.includes('/reel/') || 
-                                   window.location.pathname.includes('/reels/') ||
-                                   window.location.pathname.startsWith('/reel') ||
-                                   window.location.pathname.startsWith('/p/');
-                if (isReelPage) {
+                const isReel = window.location.pathname.includes('/reel/') || window.location.pathname.includes('/reels/');
+                if (isReel) {
                     e.preventDefault();
                     e.stopPropagation();
                 }
-            }, { passive: false, capture: true });
+            }, { capture: true, passive: false });
+
+            // C. Observer to re-apply locks on SPA route changes
+            let lastPath = window.location.pathname;
+            const routeObserver = new MutationObserver(() => {
+                if (window.location.pathname !== lastPath) {
+                    lastPath = window.location.pathname;
+                    applyReelStyles();
+                }
+            });
+
+            applyReelStyles();
+            routeObserver.observe(document.body || document.documentElement, { childList: true, subtree: true });
 
             // Trap ArrowUp / ArrowDown / PageUp / PageDown keys on reel pages
             window.addEventListener('keydown', (e) => {

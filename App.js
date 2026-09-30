@@ -52,8 +52,23 @@ const INJECTED_CSS_AND_PRELOAD = `
           overflow: hidden !important;
           touch-action: none !important;
           overscroll-behavior: none !important;
+          overscroll-behavior-y: none !important;
           height: 100% !important;
           max-height: 100vh !important;
+        }
+
+        .anchor-reel-isolated * {
+          overscroll-behavior-y: none !important;
+          overscroll-behavior: none !important;
+        }
+
+        .anchor-reel-isolated div[style*="scroll-snap"],
+        .anchor-reel-isolated div[style*="overflow-y"],
+        .anchor-reel-isolated section[style*="overflow-y"],
+        .anchor-reel-isolated main[style*="overflow-y"] {
+          overflow-y: hidden !important;
+          touch-action: none !important;
+          scroll-snap-type: none !important;
         }
 
         .anchor-reel-isolated div[data-testid="suggested-users"],
@@ -121,8 +136,23 @@ const INJECTED_JAVASCRIPT = `
             overflow: hidden !important;
             touch-action: none !important;
             overscroll-behavior: none !important;
+            overscroll-behavior-y: none !important;
             height: 100% !important;
             max-height: 100vh !important;
+          }
+
+          .anchor-reel-isolated * {
+            overscroll-behavior-y: none !important;
+            overscroll-behavior: none !important;
+          }
+
+          .anchor-reel-isolated div[style*="scroll-snap"],
+          .anchor-reel-isolated div[style*="overflow-y"],
+          .anchor-reel-isolated section[style*="overflow-y"],
+          .anchor-reel-isolated main[style*="overflow-y"] {
+            overflow-y: hidden !important;
+            touch-action: none !important;
+            scroll-snap-type: none !important;
           }
 
           .anchor-reel-isolated div[data-testid="suggested-users"],
@@ -368,38 +398,123 @@ const INJECTED_JAVASCRIPT = `
     }
 
     // 8. Strict Reel Isolation & Gesture Interception
-    function isReelOverlay() {
-      const p = window.location.pathname;
-      return p.startsWith('/reel/') || p.startsWith('/p/');
+    // 8. Strict Reel Isolation & Infinite Scroll Eradication Engine
+    function extractReelIdFromUrl(url) {
+      if (!url) return null;
+      const m = url.toString().match(/\/(reels?|p)\/([A-Za-z0-9_-]+)/i);
+      return m ? m[2] : null;
     }
 
-    let touchStartY = 0;
-    let touchStartX = 0;
+    let activeIsolatedReelId = null;
 
-    // Block vertical drag / swipe gestures before Instagram's listeners see them
-    window.addEventListener('touchstart', function(e) {
-      if (isReelOverlay() && e.touches && e.touches.length > 0) {
-        touchStartY = e.touches[0].clientY;
-        touchStartX = e.touches[0].clientX;
+    function isReelOverlay() {
+      const p = (window.location.pathname || '').toLowerCase();
+      // Match /reel/, /reels/, /p/, /share/reel/
+      if (p.includes('/reel') || p.startsWith('/p/')) {
+        return true;
       }
-    }, { capture: true, passive: false });
-
-    window.addEventListener('touchmove', function(e) {
-      if (isReelOverlay() && e.touches && e.touches.length > 0) {
-        const currentY = e.touches[0].clientY;
-        const currentX = e.touches[0].clientX;
-        const dy = Math.abs(currentY - touchStartY);
-        const dx = Math.abs(currentX - touchStartX);
-
-        // Block any vertical drag attempting to scroll/swipe to the next Reel
-        if (dy > 4 || dy >= dx) {
-          if (e.cancelable) e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          return false;
+      // DOM check: full-screen video with Instagram's Reel UI components
+      const v = document.querySelector('video');
+      if (v) {
+        const inDirectChat = p.includes('/direct/t/') && !document.querySelector('div[role="dialog"] video, div[aria-modal="true"] video');
+        if (!inDirectChat) {
+          const hasActionIcons = document.querySelector('svg[aria-label*="Like" i]') && document.querySelector('svg[aria-label*="Share" i]');
+          const hasReelHeaders = Array.from(document.querySelectorAll('span, button, a, h1, h2')).some(function(el) {
+            const t = (el.innerText || el.textContent || '').trim().toLowerCase();
+            return t === 'suggested' || t === '< suggested' || t === 'reels' || t === '< reels' || t === 'audio';
+          });
+          if (hasActionIcons || hasReelHeaders) {
+            return true;
+          }
         }
       }
-    }, { capture: true, passive: false });
+      return false;
+    }
+
+    // Intercept SPA pushState / replaceState to block navigating to a second reel
+    const origPushState = history.pushState;
+    history.pushState = function(state, title, url) {
+      if (url) {
+        const urlStr = url.toString();
+        const reelId = extractReelIdFromUrl(urlStr);
+        if (reelId) {
+          if (!activeIsolatedReelId) {
+            activeIsolatedReelId = reelId;
+          } else if (reelId !== activeIsolatedReelId) {
+            sendToNative({ type: 'RETURN_TO_MESSAGES' });
+            return;
+          }
+        } else if (activeIsolatedReelId && (urlStr.includes('/reels') || urlStr.includes('/explore'))) {
+          sendToNative({ type: 'RETURN_TO_MESSAGES' });
+          return;
+        }
+      }
+      return origPushState.apply(this, arguments);
+    };
+
+    const origReplaceState = history.replaceState;
+    history.replaceState = function(state, title, url) {
+      if (url) {
+        const urlStr = url.toString();
+        const reelId = extractReelIdFromUrl(urlStr);
+        if (reelId) {
+          if (!activeIsolatedReelId) {
+            activeIsolatedReelId = reelId;
+          } else if (reelId !== activeIsolatedReelId) {
+            sendToNative({ type: 'RETURN_TO_MESSAGES' });
+            return;
+          }
+        }
+      }
+      return origReplaceState.apply(this, arguments);
+    };
+
+    // Early Capture Gesture & Pointer Interception
+    let touchStartY = 0;
+    let touchStartX = 0;
+    let isTrackingTouch = false;
+
+    function onTouchStart(e) {
+      if (isReelOverlay()) {
+        const t = e.touches ? e.touches[0] : e;
+        if (t) {
+          touchStartY = t.clientY;
+          touchStartX = t.clientX;
+          isTrackingTouch = true;
+        }
+      }
+    }
+
+    function onTouchMove(e) {
+      if (isReelOverlay() && isTrackingTouch) {
+        const t = e.touches ? e.touches[0] : e;
+        if (t) {
+          const dy = Math.abs(t.clientY - touchStartY);
+          const dx = Math.abs(t.clientX - touchStartX);
+          // ANY vertical scroll gesture is immediately killed
+          if (dy > 3 || dy >= dx) {
+            if (e.cancelable) e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            return false;
+          }
+        }
+      }
+    }
+
+    function onTouchEnd() {
+      isTrackingTouch = false;
+    }
+
+    window.addEventListener('touchstart', onTouchStart, { capture: true, passive: false });
+    window.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
+    window.addEventListener('touchend', onTouchEnd, { capture: true, passive: false });
+    window.addEventListener('touchcancel', onTouchEnd, { capture: true, passive: false });
+
+    window.addEventListener('pointerdown', onTouchStart, { capture: true, passive: false });
+    window.addEventListener('pointermove', onTouchMove, { capture: true, passive: false });
+    window.addEventListener('pointerup', onTouchEnd, { capture: true, passive: false });
+    window.addEventListener('pointercancel', onTouchEnd, { capture: true, passive: false });
 
     window.addEventListener('wheel', function(e) {
       if (isReelOverlay()) {
@@ -420,6 +535,23 @@ const INJECTED_JAVASCRIPT = `
       }
     }, { capture: true });
 
+    // Scroll Position Hard Clamping
+    window.addEventListener('scroll', function() {
+      if (isReelOverlay()) {
+        if (window.scrollY !== 0 || window.pageYOffset !== 0) {
+          window.scrollTo(0, 0);
+        }
+      }
+    }, { capture: true, passive: false });
+
+    document.addEventListener('scroll', function(e) {
+      if (isReelOverlay() && e.target && e.target !== document) {
+        if (e.target.scrollTop && e.target.scrollTop !== 0) {
+          e.target.scrollTop = 0;
+        }
+      }
+    }, { capture: true, passive: false });
+
     // Lock Reel DOM, hide recommendation handles, and ensure Back to Messages button
     function applyReelIsolation() {
       const isReel = isReelOverlay();
@@ -427,6 +559,10 @@ const INJECTED_JAVASCRIPT = `
       const docBody = document.body;
 
       if (isReel) {
+        if (!activeIsolatedReelId) {
+          activeIsolatedReelId = extractReelIdFromUrl(window.location.href);
+        }
+
         if (docEl) {
           docEl.classList.add('anchor-reel-isolated');
           docEl.style.setProperty('overflow', 'hidden', 'important');
@@ -440,6 +576,58 @@ const INJECTED_JAVASCRIPT = `
           docBody.style.setProperty('overscroll-behavior', 'none', 'important');
         }
 
+        // Lock all scroll containers in the reel view
+        document.querySelectorAll('div, section, main, article').forEach(function(el) {
+          const comp = window.getComputedStyle(el);
+          if (
+            comp.overflowY === 'scroll' || 
+            comp.overflowY === 'auto' || 
+            (el.style && el.style.scrollSnapType && el.style.scrollSnapType !== 'none') ||
+            (comp.scrollSnapType && comp.scrollSnapType !== 'none')
+          ) {
+            el.style.setProperty('overflow-y', 'hidden', 'important');
+            el.style.setProperty('touch-action', 'none', 'important');
+            el.style.setProperty('scroll-snap-type', 'none', 'important');
+            el.scrollTop = 0;
+          }
+        });
+
+        // Hide and purge subsequent (next) reel slides in the DOM so there is nowhere to scroll to
+        const v = document.querySelector('video');
+        if (v) {
+          const slide = v.closest('article') || v.closest('section') || v.closest('div[style*="100%"]');
+          if (slide && slide.parentElement) {
+            let next = slide.nextElementSibling;
+            while (next) {
+              next.style.setProperty('display', 'none', 'important');
+              next.style.setProperty('visibility', 'hidden', 'important');
+              next.remove();
+              next = slide.nextElementSibling;
+            }
+          }
+        }
+
+        // Hook Instagram's own back button (< Suggested / < Back) to cleanly return to chat
+        document.querySelectorAll('header button, header a, div[role="button"], a[role="link"]').forEach(function(el) {
+          const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
+          if (txt === 'suggested' || txt === '< suggested' || txt === 'reels' || txt === '< reels' || txt === 'back') {
+            if (!el.__anchor_hooked) {
+              el.__anchor_hooked = true;
+              el.addEventListener('click', function(ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                activeIsolatedReelId = null;
+                sendToNative({ type: 'RETURN_TO_MESSAGES' });
+                if (window.history.length > 1) {
+                  window.history.back();
+                } else {
+                  window.location.replace('https://www.instagram.com/direct/inbox/');
+                }
+              }, true);
+            }
+          }
+        });
+
         // Hide recommendation carousels, related reels, and "Watch more"
         document.querySelectorAll('h2, h3, span, div, a').forEach(function(el) {
           if (el.children.length > 2) return;
@@ -448,7 +636,7 @@ const INJECTED_JAVASCRIPT = `
             txt === 'watch more reels' || 
             txt === 'more reels' || 
             txt === 'suggested reels' || 
-            txt === 'related reels' ||
+            txt === 'related reels' || 
             txt === 'watch again' ||
             txt.startsWith('more reels from')
           ) {
@@ -459,35 +647,16 @@ const INJECTED_JAVASCRIPT = `
           }
         });
 
-        // Ensure the Floating "Back to Messages" button is visible
+        // Ensure the Floating "Back to Messages" button is visible below the Anchor header
         if (!document.getElementById('anchor-exit-reel-btn')) {
           const btn = document.createElement('button');
           btn.id = 'anchor-exit-reel-btn';
           btn.innerHTML = '⚓ Back to Messages';
-          btn.style.cssText = \`
-            position: fixed !important;
-            top: 14px !important;
-            left: 14px !important;
-            z-index: 9999999 !important;
-            background: rgba(15, 23, 42, 0.94) !important;
-            color: #ffffff !important;
-            border: 1px solid rgba(255, 255, 255, 0.3) !important;
-            border-radius: 20px !important;
-            padding: 8px 16px !important;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
-            font-size: 13px !important;
-            font-weight: 700 !important;
-            cursor: pointer !important;
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.7) !important;
-            backdrop-filter: blur(8px) !important;
-            display: flex !important;
-            align-items: center !important;
-            gap: 6px !important;
-            pointer-events: auto !important;
-          \`;
+          btn.style.cssText = "position: fixed !important; top: 70px !important; left: 14px !important; z-index: 2147483647 !important; background: rgba(15, 23, 42, 0.95) !important; color: #ffffff !important; border: 1px solid rgba(255, 255, 255, 0.35) !important; border-radius: 20px !important; padding: 8px 16px !important; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif !important; font-size: 13px !important; font-weight: 700 !important; cursor: pointer !important; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.75) !important; backdrop-filter: blur(8px) !important; display: flex !important; align-items: center !important; gap: 6px !important; pointer-events: auto !important;";
           btn.onclick = function(e) {
             e.preventDefault();
             e.stopPropagation();
+            activeIsolatedReelId = null;
             sendToNative({ type: 'RETURN_TO_MESSAGES' });
             if (window.history.length > 1) {
               window.history.back();
@@ -498,6 +667,7 @@ const INJECTED_JAVASCRIPT = `
           (document.body || document.documentElement).appendChild(btn);
         }
       } else {
+        activeIsolatedReelId = null;
         if (docEl) {
           docEl.classList.remove('anchor-reel-isolated');
           docEl.style.removeProperty('overflow');
@@ -546,7 +716,7 @@ const INJECTED_JAVASCRIPT = `
 
 function extractReelId(url) {
   if (!url) return null;
-  const match = url.match(/\/(reel|p)\/([A-Za-z0-9_-]+)/);
+  const match = url.match(/\/(reels?|p)\/([A-Za-z0-9_-]+)/i);
   return match ? match[2] : null;
 }
 
@@ -785,23 +955,24 @@ function MainScreen() {
             return true;
           }
 
-          // Plural reels feed or explore is blocked in Anchor
-          if (path.includes('/reels') || path.includes('/explore')) {
-            setTimeout(() => handleReturnToMessages(), 0);
-            return false;
-          }
-
-          // Strict Reel overlay isolation guard
-          if (path.includes('/reel/') || path.includes('/p/')) {
-            const reelId = extractReelId(url);
+          // Strict Reel overlay isolation guard (matches /reel/<id>/, /reels/<id>/, and /p/<id>/)
+          const reelId = extractReelId(url);
+          if (reelId) {
             if (!activeTargetReelIdRef.current) {
               activeTargetReelIdRef.current = reelId;
               return true;
-            } else if (reelId && reelId !== activeTargetReelIdRef.current) {
-              // Intercept attempt to swipe to a 2nd reel
+            } else if (reelId !== activeTargetReelIdRef.current) {
+              // Intercept attempt to swipe/navigate to a second reel -> return to messages
               setTimeout(() => handleReturnToMessages(), 0);
               return false;
             }
+            return true;
+          }
+
+          // Plural reels feed (without a specific reel id) or explore is blocked in Anchor
+          if (path.includes('/reels') || path.includes('/explore')) {
+            setTimeout(() => handleReturnToMessages(), 0);
+            return false;
           }
 
           return true;
@@ -814,15 +985,17 @@ function MainScreen() {
           if (path.includes('/direct/')) {
             lastChatUrlRef.current = currentUrl;
             activeTargetReelIdRef.current = null;
-          } else if (path.includes('/reel/') || path.includes('/p/')) {
+          } else {
             const reelId = extractReelId(currentUrl);
-            if (!activeTargetReelIdRef.current) {
-              activeTargetReelIdRef.current = reelId;
-            } else if (reelId && activeTargetReelIdRef.current && reelId !== activeTargetReelIdRef.current) {
+            if (reelId) {
+              if (!activeTargetReelIdRef.current) {
+                activeTargetReelIdRef.current = reelId;
+              } else if (reelId !== activeTargetReelIdRef.current) {
+                setTimeout(() => handleReturnToMessages(), 0);
+              }
+            } else if (activeTargetReelIdRef.current && (path.includes('/reels') || path.includes('/explore'))) {
               setTimeout(() => handleReturnToMessages(), 0);
             }
-          } else if (activeTargetReelIdRef.current && (path.includes('/reels') || path.includes('/explore'))) {
-            setTimeout(() => handleReturnToMessages(), 0);
           }
         }}
         onMessage={onMessage}

@@ -644,6 +644,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                 hideBottomNavs();
                 detectUsername();
                 applyReelIsolation();
+                injectReelLockCSS();
+                enforceSingleReelDOM();
             }
 
             // 8. Strict Reel Isolation & Infinite Scroll Eradication Engine
@@ -723,45 +725,76 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                 return origReplaceState.apply(this, arguments);
             };
 
-            // 1. Prevent vertical scroll / swipe events on Reel pages
+            // 1. HARDWARE CSS LOCK ON REEL CONTAINERS
+            const injectReelLockCSS = () => {
+                if (document.getElementById('anchor-reel-hardware-lock')) return;
+                const style = document.createElement('style');
+                style.id = 'anchor-reel-hardware-lock';
+                style.innerHTML = `
+                    /* Disable vertical snapping and scrolling on reel viewports */
+                    div[role="dialog"], 
+                    section, 
+                    main, 
+                    div:has(> video),
+                    body:has(a[href*="/reel/"]), 
+                    body:has(a[href*="/reels/"]) {
+                        touch-action: pan-x !important;
+                        overscroll-behavior-y: contain !important;
+                        scroll-snap-type: none !important;
+                    }
+
+                    /* Hide next/previous reel navigation chevrons and scroll buttons */
+                    div[role="button"]:has(svg[aria-label="Down chevron"]),
+                    div[role="button"]:has(svg[aria-label="Up chevron"]),
+                    button[aria-label="Next Reel"],
+                    button[aria-label="Previous Reel"] {
+                        display: none !important;
+                        pointer-events: none !important;
+                    }
+                `;
+                (document.head || document.documentElement).appendChild(style);
+            };
+            injectReelLockCSS();
+
+            // 2. CAPTURE-PHASE TOUCH & WHEEL INTERCEPTOR
             let startY = 0;
 
-            document.addEventListener('touchstart', (e) => {
+            window.addEventListener('touchstart', (e) => {
                 if (e.touches && e.touches[0]) {
                     startY = e.touches[0].clientY;
                 }
-            }, { passive: false });
+            }, true); // Use Capture phase
 
-            document.addEventListener('touchmove', (e) => {
+            window.addEventListener('touchmove', (e) => {
                 const isReelPage = window.location.pathname.includes('/reel/') || 
                                    window.location.pathname.includes('/reels/') ||
                                    window.location.pathname.startsWith('/reel') ||
                                    window.location.pathname.startsWith('/p/');
-                if (isReelPage) {
-                    if (e.touches && e.touches[0]) {
-                        const currentY = e.touches[0].clientY;
-                        const diffY = Math.abs(currentY - startY);
-                        
-                        // Block vertical swipes exceeding 5px to prevent advancing to the next Reel
-                        if (diffY > 5) {
-                            if (e.cancelable) e.preventDefault();
-                            e.stopPropagation();
-                        }
+                if (isReelPage && e.touches && e.touches[0]) {
+                    const currentY = e.touches[0].clientY;
+                    const diffY = Math.abs(currentY - startY);
+
+                    // If the user attempts a vertical drag over 8px on a Reel, kill the event completely
+                    if (diffY > 8) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                        return false;
                     }
                 }
-            }, { passive: false });
+            }, { passive: false, capture: true });
 
-            // 2. Disable mouse wheel / trackpad scrolling on desktop/emulator previews
+            // Block mouse/wheel scrolling for emulator/desktop previews
             window.addEventListener('wheel', (e) => {
                 const isReelPage = window.location.pathname.includes('/reel/') || 
                                    window.location.pathname.includes('/reels/') ||
                                    window.location.pathname.startsWith('/reel') ||
                                    window.location.pathname.startsWith('/p/');
                 if (isReelPage) {
-                    if (e.cancelable) e.preventDefault();
+                    e.preventDefault();
                     e.stopPropagation();
                 }
-            }, { passive: false });
+            }, { passive: false, capture: true });
 
             // Trap ArrowUp / ArrowDown / PageUp / PageDown keys on reel pages
             window.addEventListener('keydown', (e) => {
@@ -775,32 +808,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                         e.stopPropagation();
                     }
                 }
-            }, { passive: false });
+            }, { capture: true });
 
-            // 3. Inject CSS rules to hide next/previous reel navigation arrows if present
-            function injectReelLockStyles() {
-                if (!document.getElementById('anchor-reel-lock-styles')) {
-                    const style = document.createElement('style');
-                    style.id = 'anchor-reel-lock-styles';
-                    style.innerHTML = `
-                        /* Lock vertical overflow on Reel container */
-                        body:has(a[href*="/reel/"]), body:has(a[href*="/reels/"]) {
-                            overflow: hidden !important;
-                            touch-action: none !important;
+            // 3. DOM NUKER: REMOVE NEXT REEL SIBLING NODES
+            const enforceSingleReelDOM = () => {
+                const isReel = window.location.pathname.includes('/reel/') || 
+                               window.location.pathname.includes('/reels/') ||
+                               window.location.pathname.startsWith('/reel') ||
+                               window.location.pathname.startsWith('/p/');
+                if (!isReel) return;
+
+                const videoElements = document.querySelectorAll('video');
+                if (videoElements.length > 1) {
+                    for (let i = 1; i < videoElements.length; i++) {
+                        const extraReel = videoElements[i].closest('article') || videoElements[i].closest('div[role="dialog"]');
+                        if (extraReel && extraReel.parentNode) {
+                            extraReel.parentNode.removeChild(extraReel);
                         }
-                        
-                        /* Hide navigation arrow buttons pointing to next/prev reels */
-                        button[aria-label="Next Reel"],
-                        button[aria-label="Previous Reel"],
-                        div[role="button"]:has(svg[aria-label="Down chevron"]),
-                        div[role="button"]:has(svg[aria-label="Up chevron"]) {
-                            display: none !important;
-                        }
-                    `;
-                    (document.head || document.documentElement).appendChild(style);
+                    }
                 }
-            }
-            injectReelLockStyles();
+            };
 
             // Scroll Position Hard Clamping
             window.addEventListener('scroll', function() {
@@ -968,6 +995,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                 }
             });
             obs.observe(document.body || document.documentElement, { childList: true, subtree: true });
+            setInterval(enforceSingleReelDOM, 500);
         })();
         """
 

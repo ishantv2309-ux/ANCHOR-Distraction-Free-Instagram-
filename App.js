@@ -207,6 +207,16 @@ const INJECTED_CSS_AND_PRELOAD = `
           height: auto !important;
           max-height: none !important;
         }
+
+        /* 6. Web Glassmorphism: Translucent Frosted Glass UI on Web Headers & Dialogs */
+        header[role="banner"],
+        div[role="dialog"] > div:first-child,
+        nav[role="navigation"]:not([style*="display: none"]) {
+          background-color: rgba(18, 18, 18, 0.72) !important;
+          backdrop-filter: blur(16px) saturate(180%) !important;
+          -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+        }
       \`;
       (document.head || document.documentElement).appendChild(style);
     }
@@ -408,6 +418,25 @@ const INJECTED_JAVASCRIPT = `
             display: none !important;
             visibility: hidden !important;
             pointer-events: none !important;
+          }
+
+          /* Permanent Profile Section Protection & Stability Shield */
+          body:not(.anchor-reel-isolated) main,
+          body:not(.anchor-reel-isolated) section {
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            height: auto !important;
+            max-height: none !important;
+          }
+
+          /* Web Glassmorphism: Translucent Frosted Glass UI on Web Headers & Dialogs */
+          header[role="banner"],
+          div[role="dialog"] > div:first-child,
+          nav[role="navigation"]:not([style*="display: none"]) {
+            background-color: rgba(18, 18, 18, 0.72) !important;
+            backdrop-filter: blur(16px) saturate(180%) !important;
+            -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
           }
         \`;
         (document.head || document.documentElement).appendChild(style);
@@ -1601,27 +1630,47 @@ function MainScreen() {
         )}
       />
 
-      {/* Anchor 4-Tab Bottom Navigation Bar (Glassmorphic) */}
-      <View style={[styles.bottomNav, { paddingBottom: bottomPadding, height: 58 + bottomPadding }]}>
-        <TouchableOpacity style={styles.tabButton} activeOpacity={0.7} delayPressIn={0} onPress={() => handleTabPress('activity')}>
+      {/* Anchor 4-Tab Floating Glass Native Bottom Navigation Bar */}
+      <View style={[styles.bottomBarContainer, { bottom: Math.max(insets.bottom, 12) + 10 }]}>
+        <TouchableOpacity 
+          style={[styles.tabButton, activeTab === 'activity' && styles.activeTabButton]} 
+          activeOpacity={0.7} 
+          delayPressIn={0} 
+          onPress={() => handleTabPress('activity')}
+        >
           <View style={[styles.tabIconWrapper, activeTab === 'activity' && styles.tabIconWrapperActive]}>
             <ActivityIcon active={activeTab === 'activity'} />
           </View>
           <Text style={[styles.tabLabel, activeTab === 'activity' && styles.tabActiveText]}>Activity</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tabButton} activeOpacity={0.7} delayPressIn={0} onPress={() => handleTabPress('messages')}>
+        <TouchableOpacity 
+          style={[styles.tabButton, activeTab === 'messages' && styles.activeTabButton]} 
+          activeOpacity={0.7} 
+          delayPressIn={0} 
+          onPress={() => handleTabPress('messages')}
+        >
           <View style={[styles.tabIconWrapper, activeTab === 'messages' && styles.tabIconWrapperActive]}>
             <MessagesIcon active={activeTab === 'messages'} />
           </View>
           <Text style={[styles.tabLabel, activeTab === 'messages' && styles.tabActiveText]}>Messages</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tabButton} activeOpacity={0.7} delayPressIn={0} onPress={() => handleTabPress('profile')}>
+        <TouchableOpacity 
+          style={[styles.tabButton, activeTab === 'profile' && styles.activeTabButton]} 
+          activeOpacity={0.7} 
+          delayPressIn={0} 
+          onPress={() => handleTabPress('profile')}
+        >
           <View style={[styles.tabIconWrapper, activeTab === 'profile' && styles.tabIconWrapperActive]}>
             <ProfileIcon active={activeTab === 'profile'} />
           </View>
           <Text style={[styles.tabLabel, activeTab === 'profile' && styles.tabActiveText]}>Profile</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tabButton} activeOpacity={0.7} delayPressIn={0} onPress={() => handleTabPress('settings')}>
+        <TouchableOpacity 
+          style={[styles.tabButton, activeTab === 'settings' && styles.activeTabButton]} 
+          activeOpacity={0.7} 
+          delayPressIn={0} 
+          onPress={() => handleTabPress('settings')}
+        >
           <View style={[styles.tabIconWrapper, activeTab === 'settings' && styles.tabIconWrapperActive]}>
             <SettingsIcon active={activeTab === 'settings'} />
           </View>
@@ -1711,44 +1760,54 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  bottomNav: {
+  bottomBarContainer: {
+    position: 'absolute',
+    bottom: 25,
+    left: 20,
+    right: 20,
+    height: 64,
+    backgroundColor: 'rgba(18, 18, 18, 0.65)', // Semi-transparent dark surface
+    borderRadius: 32,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.15)', // Subtle specular glass border
     flexDirection: 'row',
-    backgroundColor: 'rgba(12, 12, 16, 0.94)',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.08)',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingTop: 6,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
+    paddingHorizontal: 10,
+    
+    // Android GPU Elevation & Shadow
     elevation: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
   },
   tabButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 2,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 20,
+  },
+  activeTabButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)', // Subtle highlight for active tab
   },
   tabIconWrapper: {
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-    borderRadius: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'transparent',
   },
   tabIconWrapperActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: 'rgba(255, 255, 255, 0.14)',
+    backgroundColor: 'transparent',
   },
   tabLabel: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#71717a',
-    marginTop: 3,
+    color: '#8e8e93',
+    marginTop: 2,
     letterSpacing: -0.1,
   },
   tabActiveText: {

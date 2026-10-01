@@ -309,6 +309,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                         height: auto !important;
                         max-height: none !important;
                     }
+
+                    /* Web Glassmorphism: Translucent Frosted Glass UI on Web Headers & Dialogs */
+                    header[role="banner"],
+                    div[role="dialog"] > div:first-child,
+                    nav[role="navigation"]:not([style*="display: none"]) {
+                        background-color: rgba(18, 18, 18, 0.72) !important;
+                        backdrop-filter: blur(16px) saturate(180%) !important;
+                        -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+                        border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+                    }
                 `;
                 (document.head || document.documentElement).appendChild(style);
             }

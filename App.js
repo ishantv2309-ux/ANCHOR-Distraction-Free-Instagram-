@@ -206,20 +206,6 @@ const INJECTED_CSS_AND_PRELOAD = `
           -webkit-overflow-scrolling: touch !important;
           height: auto !important;
           max-height: none !important;
-          display: block !important;
-        }
-
-        /* Protect Profile Header, Avatar, Bio, Action Buttons, and Grid */
-        header:not([style*="display: none"]) {
-          display: flex !important;
-          visibility: visible !important;
-          opacity: 1 !important;
-        }
-
-        header img[alt*="profile picture" i] {
-          display: block !important;
-          visibility: visible !important;
-          opacity: 1 !important;
         }
       \`;
       (document.head || document.documentElement).appendChild(style);

@@ -308,19 +308,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                         -webkit-overflow-scrolling: touch !important;
                         height: auto !important;
                         max-height: none !important;
-                        display: block !important;
-                    }
-
-                    header:not([style*="display: none"]) {
-                        display: flex !important;
-                        visibility: visible !important;
-                        opacity: 1 !important;
-                    }
-
-                    header img[alt*="profile picture" i] {
-                        display: block !important;
-                        visibility: visible !important;
-                        opacity: 1 !important;
                     }
                 `;
                 (document.head || document.documentElement).appendChild(style);

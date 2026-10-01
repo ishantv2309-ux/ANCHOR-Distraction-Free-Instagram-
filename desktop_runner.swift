@@ -189,11 +189,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                         padding: 0 !important;
                     }
 
-                    /* Contain Reel video viewports and modal overlays within screen dimensions */
-                    div[role="dialog"], 
-                    section, 
-                    main, 
-                    article, 
+                    /* Contain Reel video viewports and modal overlays within screen dimensions (Reels only) */
+                    div[role="dialog"]:has(video),
+                    div[aria-modal="true"]:has(video),
                     div:has(> video) {
                         width: 100% !important;
                         max-width: 100vw !important;
@@ -204,7 +202,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                     }
 
                     /* Force Reels video element to fit completely inside viewport without cropping */
-                    video {
+                    div[role="dialog"] video,
+                    div[aria-modal="true"] video,
+                    div:has(> video) > video {
                         object-fit: contain !important;
                         width: 100% !important;
                         height: 100% !important;
@@ -212,8 +212,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                         max-height: 100vh !important;
                     }
 
-                    /* Keep controls and interaction buttons within screen bounds */
-                    div[style*="bottom"] {
+                    /* Keep controls and interaction buttons on reel dialogs within screen bounds */
+                    div[role="dialog"] div[style*="bottom"] {
                         max-width: 100vw !important;
                         box-sizing: border-box !important;
                     }
@@ -299,6 +299,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                         background: #18181b; color: #fff; padding: 8px 16px;
                         border-radius: 20px; font-weight: bold; border: 1px solid #333;
                         cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                    }
+
+                    /* Permanent Profile Section Protection & Stability Shield */
+                    body:not(.anchor-reel-isolated) main,
+                    body:not(.anchor-reel-isolated) section {
+                        overflow-y: auto !important;
+                        -webkit-overflow-scrolling: touch !important;
+                        height: auto !important;
+                        max-height: none !important;
+                        display: block !important;
+                    }
+
+                    header:not([style*="display: none"]) {
+                        display: flex !important;
+                        visibility: visible !important;
+                        opacity: 1 !important;
+                    }
+
+                    header img[alt*="profile picture" i] {
+                        display: block !important;
+                        visibility: visible !important;
+                        opacity: 1 !important;
                     }
                 `;
                 (document.head || document.documentElement).appendChild(style);
@@ -591,24 +613,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                         }
                     });
 
-                    // D. Target bottom avatar tab in bottom navigation bar
+                    // D. Target bottom avatar tab in bottom navigation bar (Strictly skip profile page header/bio avatar)
                     document.querySelectorAll('img[alt*="profile picture" i]').forEach(function(img) {
+                        if (img.closest('header') || img.closest('main') || img.closest('section')) {
+                            if (img.getBoundingClientRect().top < (winHeight - 90)) return;
+                        }
+
                         let cur = img;
                         let tray = null;
                         while (cur && cur !== document.body && cur !== document.documentElement) {
                             const comp = window.getComputedStyle(cur);
-                            if ((comp.position === 'fixed' || comp.position === 'sticky') && cur.getBoundingClientRect().top > 80) {
+                            if ((comp.position === 'fixed' || comp.position === 'sticky') && cur.getBoundingClientRect().top > (winHeight - 90)) {
                                 tray = cur;
                                 break;
                             }
-                            if ((cur.getAttribute('role') === 'tablist' || cur.getAttribute('role') === 'tab') && cur.getBoundingClientRect().top > 80) {
+                            if ((cur.getAttribute('role') === 'tablist' || cur.getAttribute('role') === 'tab') && cur.getBoundingClientRect().top > (winHeight - 90)) {
                                 tray = cur;
                                 break;
                             }
                             cur = cur.parentElement;
                         }
                         if (tray && !tray.querySelector('input, textarea, form, [contenteditable="true"], video')) {
-                            if (tray.getAttribute('role') !== 'dialog' && tray.getAttribute('aria-modal') !== 'true') {
+                            if (tray.getAttribute('role') !== 'dialog' && tray.getAttribute('aria-modal') !== 'true' && !tray.closest('header')) {
                                 tray.style.setProperty('display', 'none', 'important');
                                 tray.style.setProperty('visibility', 'hidden', 'important');
                                 tray.style.setProperty('pointer-events', 'none', 'important');

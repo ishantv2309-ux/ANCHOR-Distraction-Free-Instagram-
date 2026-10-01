@@ -17,7 +17,7 @@ const INJECTED_CSS_AND_PRELOAD = `
       meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
     }
 
-    // 2. Responsive Reel layout containment style
+    // 2. Responsive Reel layout containment style (Scoped strictly to Reel pages and Reel overlays so Profile and other views are never affected)
     if (!document.getElementById('anchor-reel-ui-fix')) {
       const fixStyle = document.createElement('style');
       fixStyle.id = 'anchor-reel-ui-fix';
@@ -32,11 +32,9 @@ const INJECTED_CSS_AND_PRELOAD = `
           padding: 0 !important;
         }
 
-        /* Contain Reel video viewports and modal overlays within screen dimensions */
-        div[role="dialog"], 
-        section, 
-        main, 
-        article, 
+        /* Contain Reel video viewports and modal overlays within screen dimensions (Reels only) */
+        div[role="dialog"]:has(video),
+        div[aria-modal="true"]:has(video),
         div:has(> video) {
           width: 100% !important;
           max-width: 100vw !important;
@@ -47,7 +45,9 @@ const INJECTED_CSS_AND_PRELOAD = `
         }
 
         /* Force Reels video element to fit completely inside viewport without cropping */
-        video {
+        div[role="dialog"] video,
+        div[aria-modal="true"] video,
+        div:has(> video) > video {
           object-fit: contain !important;
           width: 100% !important;
           height: 100% !important;
@@ -55,8 +55,8 @@ const INJECTED_CSS_AND_PRELOAD = `
           max-height: 100vh !important;
         }
 
-        /* Keep controls and interaction buttons within screen bounds */
-        div[style*="bottom"] {
+        /* Keep controls and interaction buttons on reel dialogs within screen bounds */
+        div[role="dialog"] div[style*="bottom"] {
           max-width: 100vw !important;
           box-sizing: border-box !important;
         }
@@ -173,11 +173,12 @@ const INJECTED_CSS_AND_PRELOAD = `
           overscroll-behavior: none !important;
         }
 
-        /* Disable vertical snapping and scrolling on reel viewports */
-        div[role="dialog"], 
-        section, 
-        main, 
-        div:has(> video) {
+        /* Disable vertical snapping and scrolling on reel viewports (Reels only) */
+        html.anchor-reel-isolated div[role="dialog"], 
+        html.anchor-reel-isolated section, 
+        html.anchor-reel-isolated main, 
+        div[role="dialog"]:has(video),
+        div[aria-modal="true"]:has(video) {
           touch-action: pan-x !important;
           overscroll-behavior-y: contain !important;
           scroll-snap-type: none !important;
@@ -196,6 +197,29 @@ const INJECTED_CSS_AND_PRELOAD = `
           display: none !important;
           visibility: hidden !important;
           pointer-events: none !important;
+        }
+
+        /* Permanent Profile Section Protection & Stability Shield */
+        body:not(.anchor-reel-isolated) main,
+        body:not(.anchor-reel-isolated) section {
+          overflow-y: auto !important;
+          -webkit-overflow-scrolling: touch !important;
+          height: auto !important;
+          max-height: none !important;
+          display: block !important;
+        }
+
+        /* Protect Profile Header, Avatar, Bio, Action Buttons, and Grid */
+        header:not([style*="display: none"]) {
+          display: flex !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+        }
+
+        header img[alt*="profile picture" i] {
+          display: block !important;
+          visibility: visible !important;
+          opacity: 1 !important;
         }
       \`;
       (document.head || document.documentElement).appendChild(style);
@@ -217,7 +241,7 @@ const INJECTED_JAVASCRIPT = `
       meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
     }
 
-    // 2. Inject CSS rules to contain Reel video bounds and prevent edge cropping
+    // 2. Inject CSS rules to contain Reel video bounds and prevent edge cropping (Reels only)
     const injectResponsiveReelCSS = () => {
       if (document.getElementById('anchor-reel-ui-fix')) return;
       const style = document.createElement('style');
@@ -233,11 +257,9 @@ const INJECTED_JAVASCRIPT = `
           padding: 0 !important;
         }
 
-        /* Contain Reel video viewports and modal overlays within screen dimensions */
-        div[role="dialog"], 
-        section, 
-        main, 
-        article, 
+        /* Contain Reel video viewports and modal overlays within screen dimensions (Reels only) */
+        div[role="dialog"]:has(video),
+        div[aria-modal="true"]:has(video),
         div:has(> video) {
           width: 100% !important;
           max-width: 100vw !important;
@@ -248,7 +270,9 @@ const INJECTED_JAVASCRIPT = `
         }
 
         /* Force Reels video element to fit completely inside viewport without cropping */
-        video {
+        div[role="dialog"] video,
+        div[aria-modal="true"] video,
+        div:has(> video) > video {
           object-fit: contain !important;
           width: 100% !important;
           height: 100% !important;
@@ -256,8 +280,8 @@ const INJECTED_JAVASCRIPT = `
           max-height: 100vh !important;
         }
 
-        /* Keep controls and interaction buttons within screen bounds */
-        div[style*="bottom"] {
+        /* Keep controls and interaction buttons on reel dialogs within screen bounds */
+        div[role="dialog"] div[style*="bottom"] {
           max-width: 100vw !important;
           box-sizing: border-box !important;
         }
@@ -656,24 +680,30 @@ const INJECTED_JAVASCRIPT = `
         }
       });
 
-      // D. Target bottom avatar tab in bottom navigation bar
+      // D. Target bottom avatar tab in bottom navigation bar (Strictly skip profile page header/bio avatar)
       document.querySelectorAll('img[alt*="profile picture" i]').forEach(function(img) {
+        // Protect profile header avatar
+        if (img.closest('header') || img.closest('main') || img.closest('section')) {
+          // If within main content area, do not treat as navigation bar icon
+          if (img.getBoundingClientRect().top < (winHeight - 90)) return;
+        }
+
         let cur = img;
         let tray = null;
         while (cur && cur !== document.body && cur !== document.documentElement) {
           const comp = window.getComputedStyle(cur);
-          if ((comp.position === 'fixed' || comp.position === 'sticky') && cur.getBoundingClientRect().top > 80) {
+          if ((comp.position === 'fixed' || comp.position === 'sticky') && cur.getBoundingClientRect().top > (winHeight - 90)) {
             tray = cur;
             break;
           }
-          if ((cur.getAttribute('role') === 'tablist' || cur.getAttribute('role') === 'tab') && cur.getBoundingClientRect().top > 80) {
+          if ((cur.getAttribute('role') === 'tablist' || cur.getAttribute('role') === 'tab') && cur.getBoundingClientRect().top > (winHeight - 90)) {
             tray = cur;
             break;
           }
           cur = cur.parentElement;
         }
         if (tray && !tray.querySelector('input, textarea, form, [contenteditable="true"], video')) {
-          if (tray.getAttribute('role') !== 'dialog' && tray.getAttribute('aria-modal') !== 'true') {
+          if (tray.getAttribute('role') !== 'dialog' && tray.getAttribute('aria-modal') !== 'true' && !tray.closest('header')) {
             tray.style.setProperty('display', 'none', 'important');
             tray.style.setProperty('visibility', 'hidden', 'important');
             tray.style.setProperty('pointer-events', 'none', 'important');

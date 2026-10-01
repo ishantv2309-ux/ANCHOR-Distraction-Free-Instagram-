@@ -1350,7 +1350,10 @@ function MainScreen() {
   };
 
   const handleTabPress = (tab) => {
-    const isCurrentTab = (activeTab === tab);
+    if (activeTab === tab) {
+      // Traditional behavior: tapping current active tab does not re-fetch/refresh
+      return;
+    }
     setActiveTab(tab);
     activeTargetReelIdRef.current = null;
     activeReelUrlRef.current = null;
@@ -1361,12 +1364,6 @@ function MainScreen() {
       webViewRef.current.injectJavaScript(`
         (function() {
           window.__ANCHOR_ACTIVE_TAB__ = 'activity';
-          const isSame = ${isCurrentTab};
-          if (isSame) {
-            window.__ACTIVITY_TRIGGERED__ = false;
-            window.location.href = 'https://www.instagram.com/?activity=1';
-            return;
-          }
           const headings = document.querySelectorAll('h1, h2, h3, header, span');
           let isNotifOpen = false;
           for (let i = 0; i < headings.length; i++) {
@@ -1387,21 +1384,13 @@ function MainScreen() {
         true;
       `);
     } else if (tab === 'messages') {
-      if (isCurrentTab) {
-        webViewRef.current.injectJavaScript(`
-          window.__ANCHOR_ACTIVE_TAB__ = 'messages';
+      webViewRef.current.injectJavaScript(`
+        window.__ANCHOR_ACTIVE_TAB__ = 'messages';
+        if (window.location.pathname !== '/direct/inbox/' && window.location.pathname !== '/direct/inbox') {
           window.location.href = 'https://www.instagram.com/direct/inbox/';
-          true;
-        `);
-      } else {
-        webViewRef.current.injectJavaScript(`
-          window.__ANCHOR_ACTIVE_TAB__ = 'messages';
-          if (window.location.pathname !== '/direct/inbox/' && window.location.pathname !== '/direct/inbox') {
-            window.location.href = 'https://www.instagram.com/direct/inbox/';
-          }
-          true;
-        `);
-      }
+        }
+        true;
+      `);
     } else if (tab === 'profile') {
       webViewRef.current.injectJavaScript(`window.__ANCHOR_ACTIVE_TAB__ = 'profile'; true;`);
       if (loggedInUser) {
@@ -1425,7 +1414,7 @@ function MainScreen() {
     } else if (tab === 'settings') {
       webViewRef.current.injectJavaScript(`
         window.__ANCHOR_ACTIVE_TAB__ = 'settings';
-        if (${isCurrentTab} || !window.location.pathname.includes('/settings')) {
+        if (!window.location.pathname.includes('/settings')) {
           window.location.href = 'https://www.instagram.com/accounts/settings/';
         }
         true;
@@ -1458,6 +1447,7 @@ function MainScreen() {
         style={[styles.webview, { flex: 1, width: '100%', height: '100%' }]}
         androidLayerType="hardware"
         renderToHardwareTextureAndroid={true}
+        pullToRefreshEnabled={true}
         cacheEnabled={true}
         cacheMode="LOAD_DEFAULT"
         databaseEnabled={true}

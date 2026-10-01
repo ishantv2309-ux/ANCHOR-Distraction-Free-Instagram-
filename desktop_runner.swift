@@ -1329,16 +1329,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
     @objc func selectActivityTab() {
         self.activeTargetReelId = nil
-        let isSame = (self.currentTab == "activity")
-        self.currentTab = "activity"
-        if isSame {
-            let refreshJs = """
-            window.__ACTIVITY_TRIGGERED__ = false;
-            window.location.href = 'https://www.instagram.com/?activity=1';
-            """
-            webView.evaluateJavaScript(refreshJs, completionHandler: nil)
+        if self.currentTab == "activity" {
             return
         }
+        self.currentTab = "activity"
         let js = """
         (function() {
             window.__ANCHOR_ACTIVE_TAB__ = 'activity';
@@ -1355,16 +1349,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
     @objc func selectMessagesTab() {
         self.activeTargetReelId = nil
-        let isSame = (self.currentTab == "messages")
-        self.currentTab = "messages"
-        if isSame {
-            let refreshJs = """
-            window.__ANCHOR_ACTIVE_TAB__ = 'messages';
-            window.location.href = 'https://www.instagram.com/direct/inbox/';
-            """
-            webView.evaluateJavaScript(refreshJs, completionHandler: nil)
+        if self.currentTab == "messages" {
             return
         }
+        self.currentTab = "messages"
         let js = """
         (function() {
             window.__ANCHOR_ACTIVE_TAB__ = 'messages';
@@ -1400,15 +1388,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
     @objc func selectProfileTab() {
         self.activeTargetReelId = nil
-        let isSame = (self.currentTab == "profile")
+        if self.currentTab == "profile" {
+            return
+        }
         self.currentTab = "profile"
         if let user = self.detectedUsername, !user.isEmpty {
             if let url = URL(string: "https://www.instagram.com/\(user)/") {
-                if isSame {
-                    webView.reload()
-                } else {
-                    webView.load(URLRequest(url: url))
-                }
+                webView.load(URLRequest(url: url))
                 return
             }
         }
@@ -1430,14 +1416,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
     @objc func selectSettingsTab() {
         self.activeTargetReelId = nil
-        let isSame = (self.currentTab == "settings")
+        if self.currentTab == "settings" {
+            return
+        }
         self.currentTab = "settings"
         if let url = URL(string: "https://www.instagram.com/accounts/settings/") {
-            if isSame {
-                webView.reload()
-            } else {
-                webView.load(URLRequest(url: url))
-            }
+            webView.load(URLRequest(url: url))
         }
     }
 }

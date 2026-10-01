@@ -1221,20 +1221,28 @@ const MessagesIcon = ({ active }) => (
 
 const ProfileIcon = ({ active }) => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    {/* Instagram signature circular avatar ring */}
     <Circle
       cx="12"
-      cy="7.5"
-      r="4"
+      cy="12"
+      r="10"
       stroke={active ? '#ffffff' : '#8e8e93'}
       strokeWidth={active ? 2.2 : 1.8}
-      fill={active ? '#ffffff' : 'none'}
     />
+    {/* Avatar head */}
+    <Circle
+      cx="12"
+      cy="9.5"
+      r="3.2"
+      fill={active ? '#ffffff' : '#8e8e93'}
+    />
+    {/* Avatar shoulders */}
     <Path
-      d="M4 20.5c0-4.418 3.582-7 8-7s8 2.582 8 7"
+      d="M6.8 18c1-2.4 2.9-3.4 5.2-3.4s4.2 1 5.2 3.4"
       stroke={active ? '#ffffff' : '#8e8e93'}
-      strokeWidth={active ? 2.2 : 1.8}
+      strokeWidth={1.8}
       strokeLinecap="round"
-      fill={active ? '#ffffff' : 'none'}
+      fill="none"
     />
   </Svg>
 );

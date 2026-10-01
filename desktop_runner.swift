@@ -161,18 +161,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         bottomNav.autoresizingMask = [.width, .maxYMargin]
 
         let tabs = [
-            ("♡", "Activity", #selector(selectActivityTab)),
-            ("✈", "Messages", #selector(selectMessagesTab)),
-            ("👤", "Profile", #selector(selectProfileTab)),
-            ("⚙", "Settings", #selector(selectSettingsTab))
+            ("heart", "Activity", #selector(selectActivityTab)),
+            ("message", "Messages", #selector(selectMessagesTab)),
+            ("person.crop.circle", "Profile", #selector(selectProfileTab)),
+            ("gearshape", "Settings", #selector(selectSettingsTab))
         ]
 
         let tabWidth = windowWidth / CGFloat(tabs.count)
         for (index, tab) in tabs.enumerated() {
-            let btn = NSButton(title: "\(tab.0)\n\(tab.1)", target: self, action: tab.2)
-            btn.frame = NSRect(x: CGFloat(index) * tabWidth + 4, y: 6, width: tabWidth - 8, height: 48)
+            let btn = NSButton(title: tab.1, target: self, action: tab.2)
+            btn.frame = NSRect(x: CGFloat(index) * tabWidth + 4, y: 4, width: tabWidth - 8, height: 50)
             btn.bezelStyle = .regularSquare
             btn.isBordered = false
+            if let img = NSImage(systemSymbolName: tab.0, accessibilityDescription: tab.1) {
+                let config = NSImage.SymbolConfiguration(pointSize: 18, weight: .medium)
+                btn.image = img.withSymbolConfiguration(config)
+                btn.imagePosition = .imageAbove
+            }
             btn.contentTintColor = .white
             btn.autoresizingMask = [.width]
             bottomNav.addSubview(btn)

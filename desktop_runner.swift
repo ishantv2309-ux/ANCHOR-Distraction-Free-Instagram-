@@ -161,10 +161,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         bottomNav.autoresizingMask = [.width, .maxYMargin]
 
         let tabs = [
-            ("🔔", "Activity", #selector(selectActivityTab)),
-            ("💬", "Messages", #selector(selectMessagesTab)),
+            ("♡", "Activity", #selector(selectActivityTab)),
+            ("✈", "Messages", #selector(selectMessagesTab)),
             ("👤", "Profile", #selector(selectProfileTab)),
-            ("⚙️", "Settings", #selector(selectSettingsTab))
+            ("⚙", "Settings", #selector(selectSettingsTab))
         ]
 
         let tabWidth = windowWidth / CGFloat(tabs.count)

@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { StyleSheet, StatusBar, Platform, View, TouchableOpacity, Text, BackHandler, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import Svg, { Path, Circle } from 'react-native-svg';
 
 const INJECTED_CSS_AND_PRELOAD = `
   (function() {
@@ -1186,6 +1187,67 @@ function extractReelId(url) {
   return match ? match[2] : null;
 }
 
+const ActivityIcon = ({ active }) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    {active ? (
+      <Path
+        d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+        fill="#ffffff"
+      />
+    ) : (
+      <Path
+        d="M16.792 3.904A4.989 4.989 0 0 1 21.5 9.122c0 3.072-2.652 4.959-5.197 7.222-2.512 2.243-3.865 3.469-4.303 3.752-.477-.309-2.143-1.823-4.303-3.752C5.141 14.072 2.5 12.167 2.5 9.122a4.989 4.989 0 0 1 4.708-5.218 4.21 4.21 0 0 1 3.675 1.941c.84 1.175.98 1.763 1.12 1.763s.278-.588 1.11-1.766a4.17 4.17 0 0 1 3.679-1.938m0-2a6.04 6.04 0 0 0-4.797 2.127 6.052 6.052 0 0 0-4.787-2.127A6.985 6.985 0 0 0 .5 9.122c0 3.61 2.55 5.827 5.015 7.97.283.246.569.494.853.747l1.027.918a44.998 44.998 0 0 0 3.518 3.018 2 2 0 0 0 2.174 0 45.263 45.263 0 0 0 3.626-3.115l.922-.824c.293-.26.59-.519.885-.774 2.334-2.025 4.98-4.32 4.98-7.94a6.985 6.985 0 0 0-6.708-7.218Z"
+        fill="#8e8e93"
+      />
+    )}
+  </Svg>
+);
+
+const MessagesIcon = ({ active }) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    {active ? (
+      <Path
+        d="M12 2C6.477 2 2 6.145 2 11.258c0 2.914 1.455 5.518 3.734 7.207V22l3.41-1.872c.915.253 1.884.39 2.856.39 5.523 0 10-4.145 10-9.258C22 6.145 17.523 2 12 2zm1.066 12.443l-2.583-2.756-5.044 2.756 5.547-5.889 2.65 2.756 4.977-2.756-5.547 5.889z"
+        fill="#ffffff"
+      />
+    ) : (
+      <Path
+        d="M12 2.5C6.753 2.5 2.5 6.438 2.5 11.258c0 2.722 1.348 5.167 3.479 6.764l-.538 3.023a.75.75 0 001.077.787l3.665-1.782c.594.137 1.205.208 1.817.208 5.247 0 9.5-3.938 9.5-8.758C21.5 6.438 17.247 2.5 12 2.5zm0 1.5c4.418 0 8 3.243 8 7.258 0 4.015-3.582 7.258-8 7.258-.553 0-1.107-.06-1.642-.18l-.348-.078-2.582 1.255.378-2.126-.183-.243C5.97 18.064 4.5 15.918 4.5 11.258c0-4.015 3.582-7.258 8-7.258zm1.066 10.943l-2.583-2.756-5.044 2.756 5.547-5.889 2.65 2.756 4.977-2.756-5.547 5.889z"
+        fill="#8e8e93"
+      />
+    )}
+  </Svg>
+);
+
+const ProfileIcon = ({ active }) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Circle
+      cx="12"
+      cy="7.5"
+      r="4"
+      stroke={active ? '#ffffff' : '#8e8e93'}
+      strokeWidth={active ? 2.2 : 1.8}
+      fill={active ? '#ffffff' : 'none'}
+    />
+    <Path
+      d="M4 20.5c0-4.418 3.582-7 8-7s8 2.582 8 7"
+      stroke={active ? '#ffffff' : '#8e8e93'}
+      strokeWidth={active ? 2.2 : 1.8}
+      strokeLinecap="round"
+      fill={active ? '#ffffff' : 'none'}
+    />
+  </Svg>
+);
+
+const SettingsIcon = ({ active }) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84a.484.484 0 00-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 00-.59.22L2.74 8.87a.49.49 0 00.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 00-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"
+      fill={active ? '#ffffff' : '#8e8e93'}
+    />
+  </Svg>
+);
+
 function MainScreen() {
   const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
@@ -1531,21 +1593,21 @@ function MainScreen() {
       />
 
       {/* Anchor 4-Tab Bottom Navigation Bar */}
-      <View style={[styles.bottomNav, { paddingBottom: bottomPadding, height: 54 + bottomPadding }]}>
-        <TouchableOpacity style={styles.tabButton} delayPressIn={0} onPress={() => handleTabPress('activity')}>
-          <Text style={[styles.tabIcon, activeTab === 'activity' && styles.tabActiveIcon]}>🔔</Text>
+      <View style={[styles.bottomNav, { paddingBottom: bottomPadding, height: 56 + bottomPadding }]}>
+        <TouchableOpacity style={styles.tabButton} activeOpacity={0.7} delayPressIn={0} onPress={() => handleTabPress('activity')}>
+          <ActivityIcon active={activeTab === 'activity'} />
           <Text style={[styles.tabLabel, activeTab === 'activity' && styles.tabActiveText]}>Activity</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tabButton} delayPressIn={0} onPress={() => handleTabPress('messages')}>
-          <Text style={[styles.tabIcon, activeTab === 'messages' && styles.tabActiveIcon]}>💬</Text>
+        <TouchableOpacity style={styles.tabButton} activeOpacity={0.7} delayPressIn={0} onPress={() => handleTabPress('messages')}>
+          <MessagesIcon active={activeTab === 'messages'} />
           <Text style={[styles.tabLabel, activeTab === 'messages' && styles.tabActiveText]}>Messages</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tabButton} delayPressIn={0} onPress={() => handleTabPress('profile')}>
-          <Text style={[styles.tabIcon, activeTab === 'profile' && styles.tabActiveIcon]}>👤</Text>
+        <TouchableOpacity style={styles.tabButton} activeOpacity={0.7} delayPressIn={0} onPress={() => handleTabPress('profile')}>
+          <ProfileIcon active={activeTab === 'profile'} />
           <Text style={[styles.tabLabel, activeTab === 'profile' && styles.tabActiveText]}>Profile</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tabButton} delayPressIn={0} onPress={() => handleTabPress('settings')}>
-          <Text style={[styles.tabIcon, activeTab === 'settings' && styles.tabActiveIcon]}>⚙️</Text>
+        <TouchableOpacity style={styles.tabButton} activeOpacity={0.7} delayPressIn={0} onPress={() => handleTabPress('settings')}>
+          <SettingsIcon active={activeTab === 'settings'} />
           <Text style={[styles.tabLabel, activeTab === 'settings' && styles.tabActiveText]}>Settings</Text>
         </TouchableOpacity>
       </View>
@@ -1643,30 +1705,25 @@ const styles = StyleSheet.create({
   },
   bottomNav: {
     flexDirection: 'row',
-    backgroundColor: '#080808',
-    borderTopWidth: 1,
-    borderTopColor: '#1c1c1e',
+    backgroundColor: '#000000',
+    borderTopWidth: 0.5,
+    borderTopColor: '#262626',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingTop: 6,
+    paddingTop: 8,
   },
   tabButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  tabIcon: {
-    fontSize: 19,
-    opacity: 0.5,
-  },
-  tabActiveIcon: {
-    opacity: 1.0,
+    paddingVertical: 2,
   },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: '#8e8e93',
-    marginTop: 2,
+    marginTop: 4,
+    letterSpacing: -0.1,
   },
   tabActiveText: {
     color: '#ffffff',

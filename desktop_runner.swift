@@ -115,50 +115,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         titleGroup.addArrangedSubview(pillBadge)
         headerView.addSubview(titleGroup)
 
-        // Header Right: Action Buttons in an NSStackView
-        let actionsStack = NSStackView()
-        actionsStack.orientation = .horizontal
-        actionsStack.alignment = .centerY
-        actionsStack.spacing = 6
-        actionsStack.frame = NSRect(x: windowWidth - 116, y: 0, width: 104, height: headerHeight)
-        actionsStack.autoresizingMask = [.minXMargin, .height]
-
-        func makeHeaderButton(title: String, action: Selector, tip: String) -> NSButton {
-            let btn = NSButton(title: title, target: self, action: action)
-            btn.translatesAutoresizingMaskIntoConstraints = false
-            btn.widthAnchor.constraint(equalToConstant: 28).isActive = true
-            btn.heightAnchor.constraint(equalToConstant: 28).isActive = true
-            btn.bezelStyle = .regularSquare
-            btn.isBordered = false
-            btn.wantsLayer = true
-            btn.layer?.backgroundColor = NSColor(calibratedRed: 0.12, green: 0.12, blue: 0.14, alpha: 1.0).cgColor
-            btn.layer?.cornerRadius = 14
-            btn.layer?.borderWidth = 1
-            btn.layer?.borderColor = NSColor(calibratedRed: 0.20, green: 0.20, blue: 0.22, alpha: 1.0).cgColor
-            btn.contentTintColor = .white
-            btn.toolTip = tip
-            return btn
-        }
-
-        let igSettingsBtn = makeHeaderButton(title: "⚙️", action: #selector(openInstagramSettings), tip: "Instagram Account Settings")
-        actionsStack.addArrangedSubview(igSettingsBtn)
-
-        let backButton = makeHeaderButton(title: "◀", action: #selector(goBack), tip: "Back")
-        actionsStack.addArrangedSubview(backButton)
-
-        let reloadButton = makeHeaderButton(title: "↻", action: #selector(reloadPage), tip: "Reload")
-        actionsStack.addArrangedSubview(reloadButton)
-
-        headerView.addSubview(actionsStack)
-
         rootContainer.addSubview(headerView)
 
-        // 2. Bottom 4-Tab Navigation Bar
+        // 2. Bottom 4-Tab Navigation Bar (Glassmorphic)
         let navHeight: CGFloat = 60
         let bottomNav = NSView(frame: NSRect(x: 0, y: 0, width: windowWidth, height: navHeight))
         bottomNav.wantsLayer = true
-        bottomNav.layer?.backgroundColor = NSColor(calibratedRed: 0.04, green: 0.04, blue: 0.04, alpha: 1.0).cgColor
+        bottomNav.layer?.backgroundColor = NSColor(calibratedRed: 0.05, green: 0.05, blue: 0.07, alpha: 0.94).cgColor
         bottomNav.autoresizingMask = [.width, .maxYMargin]
+
+        // 1px luminous top border
+        let navBorder = NSView(frame: NSRect(x: 0, y: navHeight - 1, width: windowWidth, height: 1))
+        navBorder.wantsLayer = true
+        navBorder.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.08).cgColor
+        navBorder.autoresizingMask = [.width, .minYMargin]
+        bottomNav.addSubview(navBorder)
 
         let tabs = [
             ("heart", "Activity", #selector(selectActivityTab)),
@@ -173,6 +144,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
             btn.frame = NSRect(x: CGFloat(index) * tabWidth + 4, y: 4, width: tabWidth - 8, height: 50)
             btn.bezelStyle = .regularSquare
             btn.isBordered = false
+            btn.wantsLayer = true
+            btn.layer?.cornerRadius = 14
             if let img = NSImage(systemSymbolName: tab.0, accessibilityDescription: tab.1) {
                 let config = NSImage.SymbolConfiguration(pointSize: 18, weight: .medium)
                 btn.image = img.withSymbolConfiguration(config)
@@ -1356,6 +1329,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
     @objc func selectActivityTab() {
         self.activeTargetReelId = nil
+        let isSame = (self.currentTab == "activity")
+        self.currentTab = "activity"
+        if isSame {
+            let refreshJs = """
+            window.__ACTIVITY_TRIGGERED__ = false;
+            window.location.href = 'https://www.instagram.com/?activity=1';
+            """
+            webView.evaluateJavaScript(refreshJs, completionHandler: nil)
+            return
+        }
         let js = """
         (function() {
             window.__ANCHOR_ACTIVE_TAB__ = 'activity';
@@ -1372,6 +1355,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
     @objc func selectMessagesTab() {
         self.activeTargetReelId = nil
+        let isSame = (self.currentTab == "messages")
+        self.currentTab = "messages"
+        if isSame {
+            let refreshJs = """
+            window.__ANCHOR_ACTIVE_TAB__ = 'messages';
+            window.location.href = 'https://www.instagram.com/direct/inbox/';
+            """
+            webView.evaluateJavaScript(refreshJs, completionHandler: nil)
+            return
+        }
         let js = """
         (function() {
             window.__ANCHOR_ACTIVE_TAB__ = 'messages';
@@ -1407,9 +1400,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
     @objc func selectProfileTab() {
         self.activeTargetReelId = nil
+        let isSame = (self.currentTab == "profile")
+        self.currentTab = "profile"
         if let user = self.detectedUsername, !user.isEmpty {
             if let url = URL(string: "https://www.instagram.com/\(user)/") {
-                webView.load(URLRequest(url: url))
+                if isSame {
+                    webView.reload()
+                } else {
+                    webView.load(URLRequest(url: url))
+                }
                 return
             }
         }
@@ -1431,8 +1430,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
     @objc func selectSettingsTab() {
         self.activeTargetReelId = nil
+        let isSame = (self.currentTab == "settings")
+        self.currentTab = "settings"
         if let url = URL(string: "https://www.instagram.com/accounts/settings/") {
-            webView.load(URLRequest(url: url))
+            if isSame {
+                webView.reload()
+            } else {
+                webView.load(URLRequest(url: url))
+            }
         }
     }
 }

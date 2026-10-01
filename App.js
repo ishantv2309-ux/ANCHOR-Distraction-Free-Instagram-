@@ -1350,6 +1350,7 @@ function MainScreen() {
   };
 
   const handleTabPress = (tab) => {
+    const isCurrentTab = (activeTab === tab);
     setActiveTab(tab);
     activeTargetReelIdRef.current = null;
     activeReelUrlRef.current = null;
@@ -1360,6 +1361,12 @@ function MainScreen() {
       webViewRef.current.injectJavaScript(`
         (function() {
           window.__ANCHOR_ACTIVE_TAB__ = 'activity';
+          const isSame = ${isCurrentTab};
+          if (isSame) {
+            window.__ACTIVITY_TRIGGERED__ = false;
+            window.location.href = 'https://www.instagram.com/?activity=1';
+            return;
+          }
           const headings = document.querySelectorAll('h1, h2, h3, header, span');
           let isNotifOpen = false;
           for (let i = 0; i < headings.length; i++) {
@@ -1380,13 +1387,21 @@ function MainScreen() {
         true;
       `);
     } else if (tab === 'messages') {
-      webViewRef.current.injectJavaScript(`
-        window.__ANCHOR_ACTIVE_TAB__ = 'messages';
-        if (window.location.pathname !== '/direct/inbox/' && window.location.pathname !== '/direct/inbox') {
+      if (isCurrentTab) {
+        webViewRef.current.injectJavaScript(`
+          window.__ANCHOR_ACTIVE_TAB__ = 'messages';
           window.location.href = 'https://www.instagram.com/direct/inbox/';
-        }
-        true;
-      `);
+          true;
+        `);
+      } else {
+        webViewRef.current.injectJavaScript(`
+          window.__ANCHOR_ACTIVE_TAB__ = 'messages';
+          if (window.location.pathname !== '/direct/inbox/' && window.location.pathname !== '/direct/inbox') {
+            window.location.href = 'https://www.instagram.com/direct/inbox/';
+          }
+          true;
+        `);
+      }
     } else if (tab === 'profile') {
       webViewRef.current.injectJavaScript(`window.__ANCHOR_ACTIVE_TAB__ = 'profile'; true;`);
       if (loggedInUser) {
@@ -1410,7 +1425,7 @@ function MainScreen() {
     } else if (tab === 'settings') {
       webViewRef.current.injectJavaScript(`
         window.__ANCHOR_ACTIVE_TAB__ = 'settings';
-        if (!window.location.pathname.includes('/settings')) {
+        if (${isCurrentTab} || !window.location.pathname.includes('/settings')) {
           window.location.href = 'https://www.instagram.com/accounts/settings/';
         }
         true;
@@ -1425,7 +1440,7 @@ function MainScreen() {
     <View style={styles.container}>
       <StatusBar backgroundColor="#080808" barStyle="light-content" translucent={true} />
 
-      {/* Anchor Top Header / Navbar */}
+      {/* Anchor Top Header / Navbar (Clean Glassmorphism) */}
       <View style={[styles.topHeader, { paddingTop: topPadding, height: 48 + topPadding }]}>
         <View style={styles.titleGroup}>
           <Text style={styles.brandTitle}>⚓ Anchor</Text>
@@ -1433,26 +1448,6 @@ function MainScreen() {
             <View style={styles.statusDot} />
             <Text style={styles.badgeText}>Focused</Text>
           </View>
-        </View>
-        <View style={styles.headerActions}>
-          <TouchableOpacity 
-            style={styles.headerBtn} 
-            activeOpacity={0.6}
-            delayPressIn={0} 
-            onPress={handleGoBack}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            <Text style={styles.headerBtnText}>◀</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.headerBtn} 
-            activeOpacity={0.6}
-            delayPressIn={0} 
-            onPress={handleReload}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            <Text style={styles.headerBtnText}>↻</Text>
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -1600,22 +1595,30 @@ function MainScreen() {
         )}
       />
 
-      {/* Anchor 4-Tab Bottom Navigation Bar */}
-      <View style={[styles.bottomNav, { paddingBottom: bottomPadding, height: 56 + bottomPadding }]}>
+      {/* Anchor 4-Tab Bottom Navigation Bar (Glassmorphic) */}
+      <View style={[styles.bottomNav, { paddingBottom: bottomPadding, height: 58 + bottomPadding }]}>
         <TouchableOpacity style={styles.tabButton} activeOpacity={0.7} delayPressIn={0} onPress={() => handleTabPress('activity')}>
-          <ActivityIcon active={activeTab === 'activity'} />
+          <View style={[styles.tabIconWrapper, activeTab === 'activity' && styles.tabIconWrapperActive]}>
+            <ActivityIcon active={activeTab === 'activity'} />
+          </View>
           <Text style={[styles.tabLabel, activeTab === 'activity' && styles.tabActiveText]}>Activity</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.tabButton} activeOpacity={0.7} delayPressIn={0} onPress={() => handleTabPress('messages')}>
-          <MessagesIcon active={activeTab === 'messages'} />
+          <View style={[styles.tabIconWrapper, activeTab === 'messages' && styles.tabIconWrapperActive]}>
+            <MessagesIcon active={activeTab === 'messages'} />
+          </View>
           <Text style={[styles.tabLabel, activeTab === 'messages' && styles.tabActiveText]}>Messages</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.tabButton} activeOpacity={0.7} delayPressIn={0} onPress={() => handleTabPress('profile')}>
-          <ProfileIcon active={activeTab === 'profile'} />
+          <View style={[styles.tabIconWrapper, activeTab === 'profile' && styles.tabIconWrapperActive]}>
+            <ProfileIcon active={activeTab === 'profile'} />
+          </View>
           <Text style={[styles.tabLabel, activeTab === 'profile' && styles.tabActiveText]}>Profile</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.tabButton} activeOpacity={0.7} delayPressIn={0} onPress={() => handleTabPress('settings')}>
-          <SettingsIcon active={activeTab === 'settings'} />
+          <View style={[styles.tabIconWrapper, activeTab === 'settings' && styles.tabIconWrapperActive]}>
+            <SettingsIcon active={activeTab === 'settings'} />
+          </View>
           <Text style={[styles.tabLabel, activeTab === 'settings' && styles.tabActiveText]}>Settings</Text>
         </TouchableOpacity>
       </View>
@@ -1637,36 +1640,46 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
   },
   topHeader: {
-    backgroundColor: '#080808',
+    backgroundColor: 'rgba(10, 10, 14, 0.92)',
     borderBottomWidth: 1,
-    borderBottomColor: '#1c1c1e',
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     zIndex: 10,
+    // Subtle elevation shadow
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 8,
   },
   titleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   brandTitle: {
     color: '#ffffff',
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: -0.3,
   },
   focusedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 185, 129, 0.15)',
-    borderColor: 'rgba(15, 185, 129, 0.4)',
+    backgroundColor: 'rgba(15, 185, 129, 0.12)',
+    borderColor: 'rgba(15, 185, 129, 0.35)',
     borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    gap: 5,
+    borderRadius: 14,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    gap: 6,
+    shadowColor: '#0fb981',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
   },
   statusDot: {
     width: 6,
@@ -1677,27 +1690,8 @@ const styles = StyleSheet.create({
   badgeText: {
     color: '#0fb981',
     fontSize: 11,
-    fontWeight: '600',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  headerBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#1c1c1e',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#38383a',
-  },
-  headerBtnText: {
-    color: '#ffffff',
-    fontSize: 15,
     fontWeight: '700',
+    letterSpacing: 0.2,
   },
   webview: {
     flex: 1,
@@ -1713,12 +1707,17 @@ const styles = StyleSheet.create({
   },
   bottomNav: {
     flexDirection: 'row',
-    backgroundColor: '#000000',
-    borderTopWidth: 0.5,
-    borderTopColor: '#262626',
+    backgroundColor: 'rgba(12, 12, 16, 0.94)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingTop: 8,
+    paddingTop: 6,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 12,
   },
   tabButton: {
     flex: 1,
@@ -1726,11 +1725,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 2,
   },
+  tabIconWrapper: {
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  tabIconWrapperActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+  },
   tabLabel: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#8e8e93',
-    marginTop: 4,
+    color: '#71717a',
+    marginTop: 3,
     letterSpacing: -0.1,
   },
   tabActiveText: {

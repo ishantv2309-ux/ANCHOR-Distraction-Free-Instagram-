@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, StatusBar, View, Text, TouchableOpacity, BackHandler, Platform, ActivityIndicator } from 'react-native';
+import { StyleSheet, StatusBar, View, Text, TouchableOpacity, Pressable, BackHandler, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import Svg, { Path, Circle } from 'react-native-svg';
@@ -41,26 +41,64 @@ const INJECTED_CSS_AND_PRELOAD = `
           overflow: hidden !important;
         }
 
-        /* 2. Eradicate Instagram Mobile Web Bottom Bar & Toast Notifications */
+        /* 2. Eradicate Instagram Mobile Web Bottom Bar */
         div[role="tablist"]:not(:has(svg[aria-label*="Posts" i])),
         footer[role="contentinfo"],
         div[data-testid="bottom-nav"],
         div[data-testid="mobile-nav-bar"],
         div[data-testid="tab-bar"],
         div[data-testid="bottom_bar"],
-        div[role="alert"],
-        div[role="status"],
-        div[class*="toast" i],
-        div[class*="Toast" i],
-        div[data-testid*="toast" i],
         div[data-testid*="app-upsell"],
         div[data-testid*="open-in-app"] {
-          display: none !important;
+          display: none !important; 
           visibility: hidden !important;
           pointer-events: none !important;
           height: 0 !important;
           max-height: 0 !important;
           overflow: hidden !important;
+        }
+
+        /* 3. Modern Pill Toast Notifications & Alerts */
+        .toast-bar, 
+        div[role="alert"], 
+        div[role="status"],
+        div[class*="toast" i],
+        div[class*="Toast" i],
+        div[data-testid*="toast" i] {
+          border-radius: 9999px !important; /* Forces maximum pill curves */
+          padding: 12px 24px !important;
+          background: rgba(22, 22, 22, 0.85) !important;
+          -webkit-backdrop-filter: blur(16px) !important;
+          backdrop-filter: blur(16px) !important;
+          border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
+          
+          /* Smooth Hover Transition */
+          transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+          overflow: hidden !important;
+        }
+
+        /* Curvy Glass Hover & Active States */
+        .toast-bar:hover, 
+        div[role="alert"]:hover, 
+        div[role="status"]:hover,
+        div[class*="toast" i]:hover,
+        div[class*="Toast" i]:hover,
+        div[data-testid*="toast" i]:hover {
+          transform: translateY(-2px) scale(1.03) !important; /* Subtle tactile lift */
+          border-radius: 9999px !important;
+          border-color: rgba(255, 255, 255, 0.4) !important;
+          background: rgba(32, 32, 32, 0.92) !important;
+          box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 
+                      0 0 16px rgba(255, 255, 255, 0.1) !important; /* Soft outer glow */
+        }
+
+        /* Prevent Edge Clipping on parent containers */
+        div:has(> div[role="alert"]),
+        div:has(> div[role="status"]),
+        div:has(> .toast-bar),
+        div:has(> div[class*="toast" i]) {
+          overflow: visible !important;
         }
 
         /* 3. Fast crisp header */
@@ -281,55 +319,75 @@ function MainScreen() {
         )}
       />
 
-      {/* Ultra-Clean Floating Native Navigation Bar */}
+      {/* Ultra-Clean Floating Native Pill Navigation Bar */}
       <View style={[styles.bottomBarContainer, { bottom: Math.max(insets.bottom, 12) + 6 }]}>
-        <TouchableOpacity
+        <Pressable
           style={styles.tabButton}
-          activeOpacity={0.65}
           delayPressIn={0}
           onPress={() => handleTabPress('activity')}
         >
-          <View style={[styles.tabContent, activeTab === 'activity' && styles.tabContentActive]}>
-            <ActivityIcon active={activeTab === 'activity'} />
-            <Text style={[styles.tabLabel, activeTab === 'activity' && styles.tabLabelActive]}>Activity</Text>
-          </View>
-        </TouchableOpacity>
+          {({ pressed }) => (
+            <View style={[
+              styles.tabContent,
+              activeTab === 'activity' && styles.tabContentActive,
+              pressed && styles.tabContentPressed
+            ]}>
+              <ActivityIcon active={activeTab === 'activity'} />
+              <Text style={[styles.tabLabel, activeTab === 'activity' && styles.tabLabelActive]}>Activity</Text>
+            </View>
+          )}
+        </Pressable>
 
-        <TouchableOpacity
+        <Pressable
           style={styles.tabButton}
-          activeOpacity={0.65}
           delayPressIn={0}
           onPress={() => handleTabPress('messages')}
         >
-          <View style={[styles.tabContent, activeTab === 'messages' && styles.tabContentActive]}>
-            <MessagesIcon active={activeTab === 'messages'} />
-            <Text style={[styles.tabLabel, activeTab === 'messages' && styles.tabLabelActive]}>Messages</Text>
-          </View>
-        </TouchableOpacity>
+          {({ pressed }) => (
+            <View style={[
+              styles.tabContent,
+              activeTab === 'messages' && styles.tabContentActive,
+              pressed && styles.tabContentPressed
+            ]}>
+              <MessagesIcon active={activeTab === 'messages'} />
+              <Text style={[styles.tabLabel, activeTab === 'messages' && styles.tabLabelActive]}>Messages</Text>
+            </View>
+          )}
+        </Pressable>
 
-        <TouchableOpacity
+        <Pressable
           style={styles.tabButton}
-          activeOpacity={0.65}
           delayPressIn={0}
           onPress={() => handleTabPress('profile')}
         >
-          <View style={[styles.tabContent, activeTab === 'profile' && styles.tabContentActive]}>
-            <ProfileIcon active={activeTab === 'profile'} />
-            <Text style={[styles.tabLabel, activeTab === 'profile' && styles.tabLabelActive]}>Profile</Text>
-          </View>
-        </TouchableOpacity>
+          {({ pressed }) => (
+            <View style={[
+              styles.tabContent,
+              activeTab === 'profile' && styles.tabContentActive,
+              pressed && styles.tabContentPressed
+            ]}>
+              <ProfileIcon active={activeTab === 'profile'} />
+              <Text style={[styles.tabLabel, activeTab === 'profile' && styles.tabLabelActive]}>Profile</Text>
+            </View>
+          )}
+        </Pressable>
 
-        <TouchableOpacity
+        <Pressable
           style={styles.tabButton}
-          activeOpacity={0.65}
           delayPressIn={0}
           onPress={() => handleTabPress('settings')}
         >
-          <View style={[styles.tabContent, activeTab === 'settings' && styles.tabContentActive]}>
-            <SettingsIcon active={activeTab === 'settings'} />
-            <Text style={[styles.tabLabel, activeTab === 'settings' && styles.tabLabelActive]}>Settings</Text>
-          </View>
-        </TouchableOpacity>
+          {({ pressed }) => (
+            <View style={[
+              styles.tabContent,
+              activeTab === 'settings' && styles.tabContentActive,
+              pressed && styles.tabContentPressed
+            ]}>
+              <SettingsIcon active={activeTab === 'settings'} />
+              <Text style={[styles.tabLabel, activeTab === 'settings' && styles.tabLabelActive]}>Settings</Text>
+            </View>
+          )}
+        </Pressable>
       </View>
     </View>
   );
@@ -441,19 +499,20 @@ const styles = StyleSheet.create({
     left: 20,
     right: 20,
     height: 64,
-    backgroundColor: 'rgba(20, 20, 26, 0.78)', // Translucent frosted surface
-    borderRadius: 32, // Pill capsule matching the toast bar
-    borderWidth: 1.2,
-    borderColor: 'rgba(255, 255, 255, 0.16)', // Specular glass highlight
+    backgroundColor: 'rgba(22, 22, 28, 0.85)', // Sleek dark glass surface
+    borderRadius: 9999, // Forces maximum continuous pill curves
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.20)', // Glowing translucent specular border
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
     paddingHorizontal: 8,
-    elevation: 10,
+    overflow: 'visible', // Prevent edge clipping of curved shadows and scaling
+    elevation: 12,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.45,
-    shadowRadius: 14,
+    shadowRadius: 24,
   },
   tabButton: {
     flex: 1,
@@ -461,23 +520,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: '100%',
     paddingVertical: 4,
+    overflow: 'visible',
   },
   tabContent: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 6,
     paddingHorizontal: 16,
-    borderRadius: 22, // Smooth organic pill curve
-    borderWidth: 1,
+    borderRadius: 9999, // True continuous pill curve matching toast bar
+    borderWidth: 1.5,
     borderColor: 'transparent',
+    overflow: 'visible',
   },
   tabContentActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.14)', // Glassmorphic translucent highlight
-    borderColor: 'rgba(255, 255, 255, 0.22)', // Subtle inner glass specular glow
+    borderRadius: 9999,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)', // Translucent glass fill
+    borderColor: 'rgba(255, 255, 255, 0.38)', // Curvy glass glowing border
+    transform: [{ scale: 1.04 }, { translateY: -1 }], // Sleek tactile lift
     shadowColor: '#ffffff',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  tabContentPressed: {
+    borderRadius: 9999,
+    backgroundColor: 'rgba(255, 255, 255, 0.24)',
+    borderColor: 'rgba(255, 255, 255, 0.55)',
+    transform: [{ scale: 0.98 }],
   },
   tabLabel: {
     fontSize: 10,

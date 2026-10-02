@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, StatusBar, View, Text, TouchableOpacity, Pressable, BackHandler, Platform, ActivityIndicator } from 'react-native';
+import { StyleSheet, StatusBar, View, Text, TouchableOpacity, Pressable, BackHandler, Platform, ActivityIndicator, Animated } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import Svg, { Path, Circle } from 'react-native-svg';
@@ -224,10 +224,29 @@ const SettingsIcon = ({ active }) => (
   </Svg>
 );
 
+const TABS = [
+  { id: 'activity', label: 'Activity', Icon: ActivityIcon },
+  { id: 'messages', label: 'Messages', Icon: MessagesIcon },
+  { id: 'profile', label: 'Profile', Icon: ProfileIcon },
+  { id: 'settings', label: 'Settings', Icon: SettingsIcon },
+];
+
+const getTabIndex = (tabId) => {
+  switch (tabId) {
+    case 'activity': return 0;
+    case 'messages': return 1;
+    case 'profile': return 2;
+    case 'settings': return 3;
+    default: return 1;
+  }
+};
+
 function MainScreen() {
   const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
   const [activeTab, setActiveTab] = useState('messages');
+  const [barWidth, setBarWidth] = useState(0);
+  const slideAnim = useRef(new Animated.Value(1)).current;
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [canGoBack, setCanGoBack] = useState(false);
 
@@ -257,6 +276,16 @@ function MainScreen() {
   const handleTabPress = (tab) => {
     if (tab === activeTab) return;
     setActiveTab(tab);
+
+    const targetIndex = getTabIndex(tab);
+    Animated.spring(slideAnim, {
+      toValue: targetIndex,
+      stiffness: 280,
+      damping: 26,
+      mass: 0.8,
+      useNativeDriver: true,
+    }).start();
+
     if (!webViewRef.current) return;
 
     // Use fast in-page router helper with fallback
@@ -277,6 +306,15 @@ function MainScreen() {
   };
 
   const topPadding = insets.top;
+
+  const usableWidth = barWidth > 0 ? barWidth - 12 : 0;
+  const tabWidth = usableWidth > 0 ? usableWidth / 4 : 0;
+  const pillWidth = tabWidth > 0 ? tabWidth - 6 : 0;
+
+  const translateX = slideAnim.interpolate({
+    inputRange: [0, 1, 2, 3],
+    outputRange: [0, tabWidth, tabWidth * 2, tabWidth * 3],
+  });
 
   return (
     <View style={styles.container}>
@@ -319,75 +357,45 @@ function MainScreen() {
         )}
       />
 
-      {/* Ultra-Clean Floating Native Pill Navigation Bar */}
-      <View style={[styles.bottomBarContainer, { bottom: Math.max(insets.bottom, 12) + 6 }]}>
-        <Pressable
-          style={styles.tabButton}
-          delayPressIn={0}
-          onPress={() => handleTabPress('activity')}
-        >
-          {({ pressed }) => (
-            <View style={[
-              styles.tabContent,
-              activeTab === 'activity' && styles.tabContentActive,
-              pressed && styles.tabContentPressed
-            ]}>
-              <ActivityIcon active={activeTab === 'activity'} />
-              <Text style={[styles.tabLabel, activeTab === 'activity' && styles.tabLabelActive]}>Activity</Text>
-            </View>
-          )}
-        </Pressable>
+      {/* Ultra-Clean Floating Native Pill Navigation Bar with Smooth Sliding Glass Indicator */}
+      <View
+        style={[styles.bottomBarContainer, { bottom: Math.max(insets.bottom, 12) + 6 }]}
+        onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+      >
+        {/* Continuous Gliding Frosted Glass Pill Indicator */}
+        {tabWidth > 0 && (
+          <Animated.View
+            style={[
+              styles.slidingIndicator,
+              {
+                width: pillWidth,
+                transform: [{ translateX }],
+              },
+            ]}
+          />
+        )}
 
-        <Pressable
-          style={styles.tabButton}
-          delayPressIn={0}
-          onPress={() => handleTabPress('messages')}
-        >
-          {({ pressed }) => (
-            <View style={[
-              styles.tabContent,
-              activeTab === 'messages' && styles.tabContentActive,
-              pressed && styles.tabContentPressed
-            ]}>
-              <MessagesIcon active={activeTab === 'messages'} />
-              <Text style={[styles.tabLabel, activeTab === 'messages' && styles.tabLabelActive]}>Messages</Text>
-            </View>
-          )}
-        </Pressable>
-
-        <Pressable
-          style={styles.tabButton}
-          delayPressIn={0}
-          onPress={() => handleTabPress('profile')}
-        >
-          {({ pressed }) => (
-            <View style={[
-              styles.tabContent,
-              activeTab === 'profile' && styles.tabContentActive,
-              pressed && styles.tabContentPressed
-            ]}>
-              <ProfileIcon active={activeTab === 'profile'} />
-              <Text style={[styles.tabLabel, activeTab === 'profile' && styles.tabLabelActive]}>Profile</Text>
-            </View>
-          )}
-        </Pressable>
-
-        <Pressable
-          style={styles.tabButton}
-          delayPressIn={0}
-          onPress={() => handleTabPress('settings')}
-        >
-          {({ pressed }) => (
-            <View style={[
-              styles.tabContent,
-              activeTab === 'settings' && styles.tabContentActive,
-              pressed && styles.tabContentPressed
-            ]}>
-              <SettingsIcon active={activeTab === 'settings'} />
-              <Text style={[styles.tabLabel, activeTab === 'settings' && styles.tabLabelActive]}>Settings</Text>
-            </View>
-          )}
-        </Pressable>
+        {TABS.map((tab) => {
+          const isActive = activeTab === tab.id;
+          const TabIcon = tab.Icon;
+          return (
+            <Pressable
+              key={tab.id}
+              style={styles.tabButton}
+              delayPressIn={0}
+              onPress={() => handleTabPress(tab.id)}
+            >
+              {({ pressed }) => (
+                <View style={[styles.tabContent, pressed && styles.tabContentPressed]}>
+                  <TabIcon active={isActive} />
+                  <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+                    {tab.label}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
@@ -504,9 +512,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.20)', // Glowing translucent specular border
     flexDirection: 'row',
-    justifyContent: 'space-around',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     overflow: 'visible', // Prevent edge clipping of curved shadows and scaling
     elevation: 12,
     shadowColor: '#000000',
@@ -514,46 +521,45 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.45,
     shadowRadius: 24,
   },
+  slidingIndicator: {
+    position: 'absolute',
+    top: 7,
+    left: 9, // 6px container padding + 3px slot margin
+    height: 50,
+    borderRadius: 9999, // Pill capsule matching the toast bar
+    backgroundColor: 'rgba(255, 255, 255, 0.16)', // Frosted glass indicator
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.35)', // Curvy glass glowing border
+    shadowColor: '#ffffff',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    elevation: 6,
+    zIndex: 1,
+  },
   tabButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     height: '100%',
     paddingVertical: 4,
+    zIndex: 2,
     overflow: 'visible',
   },
   tabContent: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 9999, // True continuous pill curve matching toast bar
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    overflow: 'visible',
-  },
-  tabContentActive: {
-    borderRadius: 9999,
-    backgroundColor: 'rgba(255, 255, 255, 0.16)', // Translucent glass fill
-    borderColor: 'rgba(255, 255, 255, 0.38)', // Curvy glass glowing border
-    transform: [{ scale: 1.04 }, { translateY: -1 }], // Sleek tactile lift
-    shadowColor: '#ffffff',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 5,
+    paddingVertical: 2,
   },
   tabContentPressed: {
-    borderRadius: 9999,
-    backgroundColor: 'rgba(255, 255, 255, 0.24)',
-    borderColor: 'rgba(255, 255, 255, 0.55)',
-    transform: [{ scale: 0.98 }],
+    transform: [{ scale: 0.94 }],
+    opacity: 0.85,
   },
   tabLabel: {
     fontSize: 10,
     fontWeight: '500',
     color: '#8e8e93',
-    marginTop: 2,
+    marginTop: 3,
     letterSpacing: -0.1,
   },
   tabLabelActive: {

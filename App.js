@@ -438,38 +438,46 @@ const styles = StyleSheet.create({
   },
   bottomBarContainer: {
     position: 'absolute',
-    left: 18,
-    right: 18,
-    height: 60,
-    backgroundColor: '#121216',
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    left: 20,
+    right: 20,
+    height: 64,
+    backgroundColor: 'rgba(20, 20, 26, 0.78)', // Translucent frosted surface
+    borderRadius: 32, // Pill capsule matching the toast bar
+    borderWidth: 1.2,
+    borderColor: 'rgba(255, 255, 255, 0.16)', // Specular glass highlight
     flexDirection: 'row',
-    justifyContent: 'space-evenly',
+    justifyContent: 'space-around',
     alignItems: 'center',
-    paddingHorizontal: 6,
-    elevation: 8,
+    paddingHorizontal: 8,
+    elevation: 10,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
   },
   tabButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     height: '100%',
+    paddingVertical: 4,
   },
   tabContent: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 5,
-    paddingHorizontal: 14,
-    borderRadius: 18,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: 22, // Smooth organic pill curve
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   tabContentActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.14)', // Glassmorphic translucent highlight
+    borderColor: 'rgba(255, 255, 255, 0.22)', // Subtle inner glass specular glow
+    shadowColor: '#ffffff',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
   },
   tabLabel: {
     fontSize: 10,

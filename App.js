@@ -275,7 +275,6 @@ function MainScreen() {
         allowsInlineMediaPlayback={true}
         mediaPlaybackRequiresUserAction={false}
         allowsBackForwardNavigationGestures={true}
-        decelerationRate="normal"
         injectedJavaScriptBeforeContentLoaded={INJECTED_CSS_AND_PRELOAD}
         injectedJavaScript={INJECTED_JAVASCRIPT}
         onNavigationStateChange={(navState) => setCanGoBack(navState.canGoBack)}

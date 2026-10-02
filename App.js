@@ -255,20 +255,14 @@ function MainScreen() {
         </View>
       </View>
 
-      {/* Hardware-Accelerated High-Performance WebView */}
+      {/* Clean, Non-crashing WebView */}
       <WebView
         ref={webViewRef}
         source={{ uri: 'https://www.instagram.com/direct/inbox/' }}
         style={styles.webview}
-        androidLayerType={Platform.OS === 'android' ? 'hardware' : undefined}
-        renderToHardwareTextureAndroid={Platform.OS === 'android'}
-        cacheEnabled={true}
-        cacheMode="LOAD_DEFAULT"
         domStorageEnabled={true}
-        databaseEnabled={true}
         javaScriptEnabled={true}
-        pullToRefreshEnabled={true}
-        overScrollMode="never"
+        mixedContentMode="always"
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
         scalesPageToFit={false}

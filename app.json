@@ -14,7 +14,14 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.anchor.app"
+      "bundleIdentifier": "com.anchor.app",
+      "userInterfaceStyle": "dark",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Anchor needs camera access if you take photos to send in messages.",
+        "NSPhotoLibraryUsageDescription": "Anchor needs photo library access to send images in messages.",
+        "NSMicrophoneUsageDescription": "Anchor needs microphone access to record voice messages.",
+        "UIViewControllerBasedStatusBarAppearance": false
+      }
     },
     "android": {
       "adaptiveIcon": {

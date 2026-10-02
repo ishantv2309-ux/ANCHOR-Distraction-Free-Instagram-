@@ -256,6 +256,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                     div[data-testid="tab-bar"],
                     div[data-testid="bottom_bar"],
                     div > nav[style*="bottom"],
+                    /* Target any container wrapping Reels tab/button or Explore tab */
+                    div:has(> a[href*="/reels/"]),
+                    div:has(> a[href*="/explore/"]),
+                    div:has(> a[aria-label*="Reels" i]),
+                    div:has(> svg[aria-label*="Reels" i]),
+                    div:has(> svg[aria-label*="Clips" i]),
+                    /* Target mobile web bottom tray wrapper */
+                    div[style*="position: fixed"][style*="bottom: 0"],
+                    div[style*="position: fixed"][style*="bottom:0"],
+                    div[style*="position:fixed"][style*="bottom: 0"],
+                    div[style*="position:fixed"][style*="bottom:0"],
+                    nav[style*="position: fixed"],
+                    nav[style*="position:fixed"],
+                    footer[style*="position: fixed"],
+                    footer[style*="position:fixed"],
                     div[role="alert"],
                     div[role="status"],
                     div[class*="toast" i],
@@ -423,6 +438,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                 div[data-testid="tab-bar"],
                 div[data-testid="bottom_bar"],
                 div > nav[style*="bottom"],
+                /* Target any container wrapping Reels tab/button or Explore tab */
+                div:has(> a[href*="/reels/"]),
+                div:has(> a[href*="/explore/"]),
+                div:has(> a[aria-label*="Reels" i]),
+                div:has(> svg[aria-label*="Reels" i]),
+                div:has(> svg[aria-label*="Clips" i]),
+                /* Target mobile web bottom tray wrapper */
+                div[style*="position: fixed"][style*="bottom: 0"],
+                div[style*="position: fixed"][style*="bottom:0"],
+                div[style*="position:fixed"][style*="bottom: 0"],
+                div[style*="position:fixed"][style*="bottom:0"],
+                nav[style*="position: fixed"],
+                nav[style*="position:fixed"],
+                footer[style*="position: fixed"],
+                footer[style*="position:fixed"],
                 div[role="alert"],
                 div[role="status"],
                 div[class*="toast" i],
@@ -570,6 +600,42 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                         el.style.setProperty('max-height', '0px', 'important');
                         el.style.setProperty('overflow', 'hidden', 'important');
                         try { el.remove(); } catch(e) {}
+                    });
+
+                    // B2. Eradicate any tray or parent containing Reels, Explore, or Home navigation icons
+                    document.querySelectorAll(
+                        'a[href*="/reels/"], a[href^="/reels"], a[aria-label*="Reels" i], svg[aria-label*="Reels" i], svg[aria-label*="Clips" i], a[href*="/explore/"], a[aria-label*="Explore" i], svg[aria-label*="Explore" i]'
+                    ).forEach(function(el) {
+                        let cur = el;
+                        let navBar = null;
+                        while (cur && cur !== document.body && cur !== document.documentElement) {
+                            const comp = window.getComputedStyle(cur);
+                            if (comp.position === 'fixed' || comp.position === 'sticky') {
+                                navBar = cur;
+                                break;
+                            }
+                            if (cur.getAttribute('role') === 'tablist' || cur.tagName.toLowerCase() === 'nav' || cur.tagName.toLowerCase() === 'footer') {
+                                navBar = cur;
+                                break;
+                            }
+                            cur = cur.parentElement;
+                        }
+
+                        if (navBar && !navBar.querySelector('input, textarea, form, [contenteditable="true"]')) {
+                            navBar.style.setProperty('display', 'none', 'important');
+                            navBar.style.setProperty('visibility', 'hidden', 'important');
+                            navBar.style.setProperty('pointer-events', 'none', 'important');
+                            navBar.style.setProperty('height', '0px', 'important');
+                            navBar.style.setProperty('max-height', '0px', 'important');
+                            navBar.style.setProperty('overflow', 'hidden', 'important');
+                            try { navBar.remove(); } catch(e) {}
+                        } else {
+                            const btn = el.closest('a, div[role="button"]') || el;
+                            btn.style.setProperty('display', 'none', 'important');
+                            btn.style.setProperty('visibility', 'hidden', 'important');
+                            btn.style.setProperty('pointer-events', 'none', 'important');
+                            try { btn.remove(); } catch(e) {}
+                        }
                     });
 
                     // C. Eradicate any container holding Direct Message icon or inbox link

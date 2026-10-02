@@ -103,7 +103,7 @@ const INJECTED_CSS_AND_PRELOAD = `
           overflow: hidden !important;
         }
 
-        /* 3. Eradicate Instagram Mobile Web Bottom Navigation Tabs, Trays, and Toast Bars */
+        /* 3. Eradicate Instagram Mobile Web Bottom Navigation Tabs, Trays, Reels Button & Toast Bars */
         div[role="tablist"],
         [role="tablist"],
         nav[role="navigation"],
@@ -115,6 +115,21 @@ const INJECTED_CSS_AND_PRELOAD = `
         div[data-testid="tab-bar"],
         div[data-testid="bottom_bar"],
         nav[style*="bottom"],
+        /* Target any container wrapping Reels tab/button or Explore tab */
+        div:has(> a[href*="/reels/"]),
+        div:has(> a[href*="/explore/"]),
+        div:has(> a[aria-label*="Reels" i]),
+        div:has(> svg[aria-label*="Reels" i]),
+        div:has(> svg[aria-label*="Clips" i]),
+        /* Target mobile web bottom tray wrapper */
+        div[style*="position: fixed"][style*="bottom: 0"],
+        div[style*="position: fixed"][style*="bottom:0"],
+        div[style*="position:fixed"][style*="bottom: 0"],
+        div[style*="position:fixed"][style*="bottom:0"],
+        nav[style*="position: fixed"],
+        nav[style*="position:fixed"],
+        footer[style*="position: fixed"],
+        footer[style*="position:fixed"],
         div[role="alert"],
         div[role="status"],
         div[class*="toast" i],
@@ -220,6 +235,61 @@ const INJECTED_CSS_AND_PRELOAD = `
       \`;
       (document.head || document.documentElement).appendChild(style);
     }
+
+    // 3. Early observer in preload script to immediately purge any bottom bar / toast / reels tab as soon as inserted
+    function earlyPurgeBottomNav() {
+      const selectors = [
+        'div[role="tablist"]',
+        'div[data-testid="bottom-nav"]',
+        'div[data-testid="mobile-nav-bar"]',
+        'div[data-testid="tab-bar"]',
+        'div[data-testid="bottom_bar"]',
+        'div[role="alert"]',
+        'div[role="status"]',
+        'div[class*="toast" i]',
+        'div[class*="Toast" i]',
+        'div[data-testid*="toast" i]',
+        'a[href*="/reels/"]',
+        'a[href*="/explore/"]',
+        'svg[aria-label*="Reels" i]',
+        'svg[aria-label*="Clips" i]'
+      ];
+      document.querySelectorAll(selectors.join(', ')).forEach(function(el) {
+        if (el.id === 'anchor-exit-reel-btn') return;
+        // On profile pages, preserve post/tagged tabs
+        if (el.getAttribute('role') === 'tablist' && el.querySelector('svg[aria-label*="Posts" i], svg[aria-label*="Grid" i], svg[aria-label*="Tagged" i]')) {
+          return;
+        }
+        let cur = el;
+        let navBar = null;
+        while (cur && cur !== document.body && cur !== document.documentElement) {
+          const comp = window.getComputedStyle(cur);
+          if (comp.position === 'fixed' || comp.position === 'sticky') {
+            navBar = cur;
+            break;
+          }
+          if (cur.getAttribute('role') === 'tablist' || cur.tagName.toLowerCase() === 'nav' || cur.tagName.toLowerCase() === 'footer') {
+            navBar = cur;
+            break;
+          }
+          cur = cur.parentElement;
+        }
+        const target = navBar || (el.closest('a, div[role="button"]') || el);
+        if (target && !target.querySelector('input, textarea, form, [contenteditable="true"]')) {
+          target.style.setProperty('display', 'none', 'important');
+          target.style.setProperty('visibility', 'hidden', 'important');
+          target.style.setProperty('pointer-events', 'none', 'important');
+          target.style.setProperty('height', '0px', 'important');
+          target.style.setProperty('max-height', '0px', 'important');
+          target.style.setProperty('overflow', 'hidden', 'important');
+        }
+      });
+    }
+
+    try {
+      const earlyObs = new MutationObserver(earlyPurgeBottomNav);
+      earlyObs.observe(document.documentElement || document, { childList: true, subtree: true });
+    } catch(e) {}
   })();
   true;
 `;
@@ -333,7 +403,7 @@ const INJECTED_JAVASCRIPT = `
             overflow: hidden !important;
           }
 
-          /* 3. Eradicate Instagram Mobile Web Bottom Navigation Tabs, Trays, and Toast Bars */
+          /* 3. Eradicate Instagram Mobile Web Bottom Navigation Tabs, Trays, Reels Button & Toast Bars */
           div[role="tablist"],
           [role="tablist"],
           nav[role="navigation"],
@@ -345,6 +415,21 @@ const INJECTED_JAVASCRIPT = `
           div[data-testid="tab-bar"],
           div[data-testid="bottom_bar"],
           nav[style*="bottom"],
+          /* Target any container wrapping Reels tab/button or Explore tab */
+          div:has(> a[href*="/reels/"]),
+          div:has(> a[href*="/explore/"]),
+          div:has(> a[aria-label*="Reels" i]),
+          div:has(> svg[aria-label*="Reels" i]),
+          div:has(> svg[aria-label*="Clips" i]),
+          /* Target mobile web bottom tray wrapper */
+          div[style*="position: fixed"][style*="bottom: 0"],
+          div[style*="position: fixed"][style*="bottom:0"],
+          div[style*="position:fixed"][style*="bottom: 0"],
+          div[style*="position:fixed"][style*="bottom:0"],
+          nav[style*="position: fixed"],
+          nav[style*="position:fixed"],
+          footer[style*="position: fixed"],
+          footer[style*="position:fixed"],
           div[role="alert"],
           div[role="status"],
           div[class*="toast" i],
@@ -652,6 +737,42 @@ const INJECTED_JAVASCRIPT = `
         el.style.setProperty('max-height', '0px', 'important');
         el.style.setProperty('overflow', 'hidden', 'important');
         try { el.remove(); } catch(e) {}
+      });
+
+      // B2. Eradicate any tray or parent containing Reels, Explore, or Home navigation icons
+      document.querySelectorAll(
+        'a[href*="/reels/"], a[href^="/reels"], a[aria-label*="Reels" i], svg[aria-label*="Reels" i], svg[aria-label*="Clips" i], a[href*="/explore/"], a[aria-label*="Explore" i], svg[aria-label*="Explore" i]'
+      ).forEach(function(el) {
+        let cur = el;
+        let navBar = null;
+        while (cur && cur !== document.body && cur !== document.documentElement) {
+          const comp = window.getComputedStyle(cur);
+          if (comp.position === 'fixed' || comp.position === 'sticky') {
+            navBar = cur;
+            break;
+          }
+          if (cur.getAttribute('role') === 'tablist' || cur.tagName.toLowerCase() === 'nav' || cur.tagName.toLowerCase() === 'footer') {
+            navBar = cur;
+            break;
+          }
+          cur = cur.parentElement;
+        }
+
+        if (navBar && !navBar.querySelector('input, textarea, form, [contenteditable="true"]')) {
+          navBar.style.setProperty('display', 'none', 'important');
+          navBar.style.setProperty('visibility', 'hidden', 'important');
+          navBar.style.setProperty('pointer-events', 'none', 'important');
+          navBar.style.setProperty('height', '0px', 'important');
+          navBar.style.setProperty('max-height', '0px', 'important');
+          navBar.style.setProperty('overflow', 'hidden', 'important');
+          try { navBar.remove(); } catch(e) {}
+        } else {
+          const btn = el.closest('a, div[role="button"]') || el;
+          btn.style.setProperty('display', 'none', 'important');
+          btn.style.setProperty('visibility', 'hidden', 'important');
+          btn.style.setProperty('pointer-events', 'none', 'important');
+          try { btn.remove(); } catch(e) {}
+        }
       });
 
       // C. Target any container holding the Direct Message icon or inbox link
@@ -1220,7 +1341,19 @@ const INJECTED_JAVASCRIPT = `
     window.addEventListener('resize', purgeToastbar, { passive: true });
     window.addEventListener('scroll', purgeToastbar, { passive: true });
     document.addEventListener('DOMContentLoaded', purgeToastbar);
-    setInterval(purgeToastbar, 150);
+
+    // Run rapid burst of purgeToastbar in initial seconds to eliminate flash of toastbar / reels button
+    let burstCount = 0;
+    function burstPurge() {
+      purgeToastbar();
+      burstCount++;
+      if (burstCount < 60) {
+        requestAnimationFrame(burstPurge);
+      }
+    }
+    requestAnimationFrame(burstPurge);
+
+    setInterval(purgeToastbar, 100);
     setInterval(enforceSingleReelDOM, 500);
   })();
   true;

@@ -1623,8 +1623,8 @@ function MainScreen() {
         ref={webViewRef}
         source={{ uri: 'https://www.instagram.com/direct/inbox/' }}
         style={[styles.webview, { flex: 1, width: '100%', height: '100%' }]}
-        androidLayerType="hardware"
-        renderToHardwareTextureAndroid={true}
+        androidLayerType={Platform.OS === 'android' ? 'hardware' : undefined}
+        renderToHardwareTextureAndroid={Platform.OS === 'android'}
         pullToRefreshEnabled={true}
         cacheEnabled={true}
         cacheMode="LOAD_DEFAULT"
@@ -1637,7 +1637,7 @@ function MainScreen() {
         thirdPartyCookiesEnabled={true}
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
-        scalesPageToFit={true}
+        scalesPageToFit={Platform.OS === 'android'}
         textZoom={100}
         automaticallyAdjustContentInsets={false}
         originWhitelist={['*']}
@@ -1647,9 +1647,23 @@ function MainScreen() {
         allowsBackForwardNavigationGestures={true}
         decelerationRate="normal"
         dataDetectorTypes="none"
-        userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
+        userAgent={Platform.OS === 'android' 
+          ? "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36" 
+          : "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
+        }
         injectedJavaScriptBeforeContentLoaded={INJECTED_CSS_AND_PRELOAD}
         injectedJavaScript={INJECTED_JAVASCRIPT}
+        onError={(syntheticEvent) => {
+          const { nativeEvent } = syntheticEvent;
+          console.warn('WebView error: ', nativeEvent);
+        }}
+        onRenderProcessGone={(syntheticEvent) => {
+          const { nativeEvent } = syntheticEvent;
+          console.warn('WebView process gone: ', nativeEvent);
+          if (webViewRef.current) {
+            webViewRef.current.reload();
+          }
+        }}
         onLoadEnd={() => {
           if (webViewRef.current) {
             webViewRef.current.injectJavaScript(INJECTED_JAVASCRIPT);

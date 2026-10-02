@@ -238,57 +238,65 @@ const INJECTED_CSS_AND_PRELOAD = `
 
     // 3. Early observer in preload script to immediately purge any bottom bar / toast / reels tab as soon as inserted
     function earlyPurgeBottomNav() {
-      const selectors = [
-        'div[role="tablist"]',
-        'div[data-testid="bottom-nav"]',
-        'div[data-testid="mobile-nav-bar"]',
-        'div[data-testid="tab-bar"]',
-        'div[data-testid="bottom_bar"]',
-        'div[role="alert"]',
-        'div[role="status"]',
-        'div[class*="toast" i]',
-        'div[class*="Toast" i]',
-        'div[data-testid*="toast" i]',
-        'a[href*="/reels/"]',
-        'a[href*="/explore/"]',
-        'svg[aria-label*="Reels" i]',
-        'svg[aria-label*="Clips" i]'
-      ];
-      document.querySelectorAll(selectors.join(', ')).forEach(function(el) {
-        if (el.id === 'anchor-exit-reel-btn') return;
-        // On profile pages, preserve post/tagged tabs
-        if (el.getAttribute('role') === 'tablist' && el.querySelector('svg[aria-label*="Posts" i], svg[aria-label*="Grid" i], svg[aria-label*="Tagged" i]')) {
-          return;
-        }
-        let cur = el;
-        let navBar = null;
-        while (cur && cur !== document.body && cur !== document.documentElement) {
-          const comp = window.getComputedStyle(cur);
-          if (comp.position === 'fixed' || comp.position === 'sticky') {
-            navBar = cur;
-            break;
+      if (!document || (!document.body && !document.documentElement)) return;
+      try {
+        const selectors = [
+          'div[role="tablist"]',
+          'div[data-testid="bottom-nav"]',
+          'div[data-testid="mobile-nav-bar"]',
+          'div[data-testid="tab-bar"]',
+          'div[data-testid="bottom_bar"]',
+          'div[role="alert"]',
+          'div[role="status"]',
+          'div[class*="toast" i]',
+          'div[class*="Toast" i]',
+          'div[data-testid*="toast" i]',
+          'a[href*="/reels/"]',
+          'a[href*="/explore/"]',
+          'svg[aria-label*="Reels" i]',
+          'svg[aria-label*="Clips" i]'
+        ];
+        document.querySelectorAll(selectors.join(', ')).forEach(function(el) {
+          if (!el || el.id === 'anchor-exit-reel-btn') return;
+          // On profile pages, preserve post/tagged tabs
+          if (el.getAttribute && el.getAttribute('role') === 'tablist' && el.querySelector('svg[aria-label*="Posts" i], svg[aria-label*="Grid" i], svg[aria-label*="Tagged" i]')) {
+            return;
           }
-          if (cur.getAttribute('role') === 'tablist' || cur.tagName.toLowerCase() === 'nav' || cur.tagName.toLowerCase() === 'footer') {
-            navBar = cur;
-            break;
+          let cur = el;
+          let navBar = null;
+          while (cur && cur !== document.body && cur !== document.documentElement) {
+            const comp = window.getComputedStyle ? window.getComputedStyle(cur) : null;
+            if (comp && (comp.position === 'fixed' || comp.position === 'sticky')) {
+              navBar = cur;
+              break;
+            }
+            if (cur.getAttribute && (cur.getAttribute('role') === 'tablist' || (cur.tagName && (cur.tagName.toLowerCase() === 'nav' || cur.tagName.toLowerCase() === 'footer')))) {
+              navBar = cur;
+              break;
+            }
+            cur = cur.parentElement;
           }
-          cur = cur.parentElement;
-        }
-        const target = navBar || (el.closest('a, div[role="button"]') || el);
-        if (target && !target.querySelector('input, textarea, form, [contenteditable="true"]')) {
-          target.style.setProperty('display', 'none', 'important');
-          target.style.setProperty('visibility', 'hidden', 'important');
-          target.style.setProperty('pointer-events', 'none', 'important');
-          target.style.setProperty('height', '0px', 'important');
-          target.style.setProperty('max-height', '0px', 'important');
-          target.style.setProperty('overflow', 'hidden', 'important');
-        }
-      });
+          const target = navBar || (el.closest ? el.closest('a, div[role="button"]') : el) || el;
+          if (target && target.style && (!target.querySelector || !target.querySelector('input, textarea, form, [contenteditable="true"]'))) {
+            target.style.setProperty('display', 'none', 'important');
+            target.style.setProperty('visibility', 'hidden', 'important');
+            target.style.setProperty('pointer-events', 'none', 'important');
+            target.style.setProperty('height', '0px', 'important');
+            target.style.setProperty('max-height', '0px', 'important');
+            target.style.setProperty('overflow', 'hidden', 'important');
+          }
+        });
+      } catch(e) {}
     }
 
     try {
-      const earlyObs = new MutationObserver(earlyPurgeBottomNav);
-      earlyObs.observe(document.documentElement || document, { childList: true, subtree: true });
+      if (typeof MutationObserver !== 'undefined') {
+        const earlyObs = new MutationObserver(earlyPurgeBottomNav);
+        const root = document.documentElement || document;
+        if (root) {
+          earlyObs.observe(root, { childList: true, subtree: true });
+        }
+      }
     } catch(e) {}
   })();
   true;
@@ -1637,7 +1645,7 @@ function MainScreen() {
         thirdPartyCookiesEnabled={true}
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
-        scalesPageToFit={Platform.OS === 'android'}
+        scalesPageToFit={false}
         textZoom={100}
         automaticallyAdjustContentInsets={false}
         originWhitelist={['*']}
@@ -1662,11 +1670,6 @@ function MainScreen() {
           console.warn('WebView process gone: ', nativeEvent);
           if (webViewRef.current) {
             webViewRef.current.reload();
-          }
-        }}
-        onLoadEnd={() => {
-          if (webViewRef.current) {
-            webViewRef.current.injectJavaScript(INJECTED_JAVASCRIPT);
           }
         }}
         onShouldStartLoadWithRequest={(request) => {

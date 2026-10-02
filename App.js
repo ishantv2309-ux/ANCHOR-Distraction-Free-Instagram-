@@ -245,7 +245,7 @@ function MainScreen() {
   const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
   const [activeTab, setActiveTab] = useState('messages');
-  const [barWidth, setBarWidth] = useState(0);
+  const [innerWidth, setInnerWidth] = useState(0);
   const slideAnim = useRef(new Animated.Value(1)).current;
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [canGoBack, setCanGoBack] = useState(false);
@@ -307,9 +307,8 @@ function MainScreen() {
 
   const topPadding = insets.top;
 
-  const usableWidth = barWidth > 0 ? barWidth - 12 : 0;
-  const tabWidth = usableWidth > 0 ? usableWidth / 4 : 0;
-  const pillWidth = tabWidth > 0 ? tabWidth - 6 : 0;
+  const tabWidth = innerWidth > 0 ? innerWidth / 4 : 0;
+  const pillWidth = tabWidth > 0 ? tabWidth - 4 : 0;
 
   const translateX = slideAnim.interpolate({
     inputRange: [0, 1, 2, 3],
@@ -358,44 +357,46 @@ function MainScreen() {
       />
 
       {/* Ultra-Clean Floating Native Pill Navigation Bar with Smooth Sliding Glass Indicator */}
-      <View
-        style={[styles.bottomBarContainer, { bottom: Math.max(insets.bottom, 12) + 6 }]}
-        onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
-      >
-        {/* Continuous Gliding Frosted Glass Pill Indicator */}
-        {tabWidth > 0 && (
-          <Animated.View
-            style={[
-              styles.slidingIndicator,
-              {
-                width: pillWidth,
-                transform: [{ translateX }],
-              },
-            ]}
-          />
-        )}
+      <View style={[styles.bottomBarContainer, { bottom: Math.max(insets.bottom, 16) + 8 }]}>
+        <View
+          style={styles.barInner}
+          onLayout={(e) => setInnerWidth(e.nativeEvent.layout.width)}
+        >
+          {/* Continuous Gliding Frosted Glass Pill Indicator */}
+          {tabWidth > 0 && (
+            <Animated.View
+              style={[
+                styles.slidingIndicator,
+                {
+                  width: pillWidth,
+                  transform: [{ translateX }],
+                },
+              ]}
+            />
+          )}
 
-        {TABS.map((tab) => {
-          const isActive = activeTab === tab.id;
-          const TabIcon = tab.Icon;
-          return (
-            <Pressable
-              key={tab.id}
-              style={styles.tabButton}
-              delayPressIn={0}
-              onPress={() => handleTabPress(tab.id)}
-            >
-              {({ pressed }) => (
-                <View style={[styles.tabContent, pressed && styles.tabContentPressed]}>
-                  <TabIcon active={isActive} />
-                  <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
-                    {tab.label}
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-          );
-        })}
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.id;
+            const TabIcon = tab.Icon;
+            return (
+              <Pressable
+                key={tab.id}
+                style={styles.tabButton}
+                delayPressIn={0}
+                onPress={() => handleTabPress(tab.id)}
+              >
+                {({ pressed }) => (
+                  <View style={[styles.tabContent, pressed && styles.tabContentPressed]}>
+                    <TabIcon active={isActive} />
+                    <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+                      {tab.label}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
     </View>
   );
@@ -506,35 +507,41 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 20,
     right: 20,
-    height: 64,
-    backgroundColor: 'rgba(22, 22, 28, 0.85)', // Sleek dark glass surface
-    borderRadius: 9999, // Forces maximum continuous pill curves
+    height: 60,
+    backgroundColor: 'rgba(22, 22, 28, 0.88)', // Sleek dark glass surface
+    borderRadius: 9999, // Continuous capsule pill curve
     borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.20)', // Glowing translucent specular border
+    padding: 4, // Exactly uniform 4px on top, bottom, left, right!
+    overflow: 'visible',
+    elevation: 10,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+  },
+  barInner: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 6,
-    overflow: 'visible', // Prevent edge clipping of curved shadows and scaling
-    elevation: 12,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.45,
-    shadowRadius: 24,
+    height: '100%',
+    position: 'relative',
+    overflow: 'visible',
   },
   slidingIndicator: {
     position: 'absolute',
-    top: 7,
-    left: 9, // 6px container padding + 3px slot margin
-    height: 50,
+    top: 2,
+    bottom: 2,
+    left: 2,
     borderRadius: 9999, // Pill capsule matching the toast bar
     backgroundColor: 'rgba(255, 255, 255, 0.16)', // Frosted glass indicator
     borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.35)', // Curvy glass glowing border
     shadowColor: '#ffffff',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 0 }, // Symmetrical glow, no downward displacement!
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
     zIndex: 1,
   },
   tabButton: {
@@ -542,14 +549,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: '100%',
-    paddingVertical: 4,
     zIndex: 2,
     overflow: 'visible',
   },
   tabContent: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 2,
   },
   tabContentPressed: {
     transform: [{ scale: 0.94 }],
@@ -559,8 +564,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '500',
     color: '#8e8e93',
-    marginTop: 3,
+    marginTop: 2,
     letterSpacing: -0.1,
+    includeFontPadding: false, // Prevents Android font vertical skew
+    textAlign: 'center',
   },
   tabLabelActive: {
     color: '#ffffff',

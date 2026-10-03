@@ -219,7 +219,17 @@ const INJECTED_CSS_AND_PRELOAD = `
 
 const INJECTED_JAVASCRIPT = `
   (function() {
-    // 1. Force Root Dark Theme immediately
+    // 1. Prevent unwanted client redirects to edit profile
+    const preventEditProfileRedirect = () => {
+      if (window.location.pathname.includes('/accounts/edit/')) {
+        const referrer = document.referrer;
+        if (!referrer.includes('/accounts/edit/')) {
+          window.location.href = 'https://www.instagram.com/me/';
+        }
+      }
+    };
+
+    // 2. Force Root Dark Theme immediately
     const forceDarkTheme = () => {
       document.documentElement.classList.add('dark');
       document.documentElement.style.setProperty('background-color', '#000000', 'important');
@@ -230,9 +240,10 @@ const INJECTED_JAVASCRIPT = `
       }
     };
 
-    // 2. Permanently Nuke "Use the App" banners and force bottom padding
+    // 3. Permanently Nuke "Use the App" banners and force bottom padding
     const nukeBannersAndFixLayout = () => {
       forceDarkTheme();
+      preventEditProfileRedirect();
 
       // Inject strict global styles
       const styleId = 'anchor-permanent-fix';
@@ -315,6 +326,7 @@ const INJECTED_JAVASCRIPT = `
     };
 
     // Run immediately and every 300ms during page load
+    preventEditProfileRedirect();
     nukeBannersAndFixLayout();
     const interval = setInterval(nukeBannersAndFixLayout, 300);
     setTimeout(() => clearInterval(interval), 10000); // Stop polling after 10s
@@ -326,18 +338,30 @@ const INJECTED_JAVASCRIPT = `
     // Expose for native callbacks
     window.__anchorClean = nukeBannersAndFixLayout;
 
-    // 3. Detect logged-in username for instant Profile tab navigation
+    // 4. Detect logged-in username for instant Profile tab navigation
     function detectUser() {
       if (window.__ANCHOR_USER__) return;
       try {
-        var link = document.querySelector('a[href^="/"][role="link"]:has(img[alt*="profile picture" i])') ||
-                   document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])');
-        if (link) {
-          var u = (link.getAttribute('href') || '').replace(/\\//g, '').split('?')[0];
-          if (u && !['explore', 'reels', 'direct', 'stories'].includes(u)) {
+        const userMeta = document.querySelector('meta[property="al:ios:url"]');
+        if (userMeta && userMeta.content) {
+          const u = userMeta.content.split('user?username=')[1];
+          if (u && !['explore', 'reels', 'direct', 'stories', 'accounts'].includes(u)) {
             window.__ANCHOR_USER__ = u;
             if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOGGED_IN_USER', username: u }));
+            }
+            return;
+          }
+        }
+
+        var link = document.querySelector('a[href^="/"][role="link"]:has(img[alt*="profile picture" i])') ||
+                   document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])');
+        if (link) {
+          var u2 = (link.getAttribute('href') || '').replace(/\\//g, '').split('?')[0];
+          if (u2 && !['explore', 'reels', 'direct', 'stories', 'accounts'].includes(u2)) {
+            window.__ANCHOR_USER__ = u2;
+            if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOGGED_IN_USER', username: u2 }));
             }
           }
         }
@@ -347,7 +371,7 @@ const INJECTED_JAVASCRIPT = `
     detectUser();
     setInterval(detectUser, 1500);
 
-    // 4. Fast direct tab router helper callable from native
+    // 5. Fast direct tab router helper callable from native
     window.__anchorRoute = function(destination) {
       if (destination === 'activity') {
         var heart = document.querySelector('svg[aria-label*="Activity" i], svg[aria-label*="Notification" i], a[href*="/activity"]');
@@ -362,13 +386,26 @@ const INJECTED_JAVASCRIPT = `
           window.location.href = 'https://www.instagram.com/direct/inbox/';
         }
       } else if (destination === 'profile') {
-        if (window.__ANCHOR_USER__) {
-          window.location.href = 'https://www.instagram.com/' + window.__ANCHOR_USER__ + '/';
+        let username = window.__ANCHOR_USER__ || null;
+        try {
+          const userMeta = document.querySelector('meta[property="al:ios:url"]');
+          if (userMeta && userMeta.content) {
+            username = userMeta.content.split('user?username=')[1];
+          }
+        } catch (e) {}
+
+        if (!username) {
+          const profileAnchor = document.querySelector('a[href*="/"][role="link"]:has(img)') ||
+                                document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])');
+          if (profileAnchor && profileAnchor.getAttribute('href')) {
+            username = profileAnchor.getAttribute('href').replace(/\\//g, '').split('?')[0];
+          }
+        }
+
+        if (username && !username.includes('accounts') && !username.includes('edit')) {
+          window.location.href = 'https://www.instagram.com/' + username + '/';
         } else {
-          var avatar = document.querySelector('img[alt*="profile picture" i]');
-          var aLink = avatar ? avatar.closest('a') : null;
-          if (aLink) aLink.click();
-          else window.location.href = 'https://www.instagram.com/accounts/edit/';
+          window.location.href = 'https://www.instagram.com/me/';
         }
       } else if (destination === 'settings') {
         window.location.href = 'https://www.instagram.com/accounts/settings/';
@@ -502,6 +539,7 @@ function MainScreen() {
         } else {
           ${tab === 'activity' ? "window.location.href = 'https://www.instagram.com/?activity=1';" : ''}
           ${tab === 'messages' ? "window.location.href = 'https://www.instagram.com/direct/inbox/';" : ''}
+          ${tab === 'profile' ? "window.location.href = 'https://www.instagram.com/me/';" : ''}
           ${tab === 'settings' ? "window.location.href = 'https://www.instagram.com/accounts/settings/';" : ''}
         }
         true;

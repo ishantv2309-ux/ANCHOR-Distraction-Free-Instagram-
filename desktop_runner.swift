@@ -1564,9 +1564,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
             return
         }
         self.currentTab = "settings"
-        if let url = URL(string: "https://www.instagram.com/settings/") {
-            webView.load(URLRequest(url: url))
-        }
+        let js = """
+        (function() {
+            var gear = document.querySelector('svg[aria-label*="Options" i], svg[aria-label*="Settings" i], a[href*="/accounts/settings/"]');
+            var gearBtn = gear ? gear.closest('a, button, div[role="button"]') : null;
+            if (gearBtn) {
+                gearBtn.click();
+            } else {
+                window.location.href = 'https://www.instagram.com/accounts/settings/';
+            }
+        })();
+        """
+        webView.evaluateJavaScript(js, completionHandler: nil)
     }
 }
 

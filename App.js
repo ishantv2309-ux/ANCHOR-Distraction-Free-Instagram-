@@ -435,7 +435,13 @@ const INJECTED_JAVASCRIPT = `
           }
         }
       } else if (destination === 'settings') {
-        window.location.href = 'https://www.instagram.com/settings/';
+        var gear = document.querySelector('svg[aria-label*="Options" i], svg[aria-label*="Settings" i], a[href*="/accounts/settings/"]');
+        var gearBtn = gear ? gear.closest('a, button, div[role="button"]') : null;
+        if (gearBtn) {
+          gearBtn.click();
+        } else {
+          window.location.href = 'https://www.instagram.com/accounts/settings/';
+        }
       }
     };
   })();
@@ -600,7 +606,22 @@ function MainScreen() {
         webViewRef.current.injectJavaScript(resolveProfileJS);
       }
     } else if (tab === 'settings') {
-      webViewRef.current.injectJavaScript("window.location.href = 'https://www.instagram.com/settings/'; true;");
+      webViewRef.current.injectJavaScript(`
+        (function() {
+          if (typeof window.__anchorRoute === 'function') {
+            window.__anchorRoute('settings');
+            return;
+          }
+          var gear = document.querySelector('svg[aria-label*="Options" i], svg[aria-label*="Settings" i], a[href*="/accounts/settings/"]');
+          var gearBtn = gear ? gear.closest('a, button, div[role="button"]') : null;
+          if (gearBtn) {
+            gearBtn.click();
+          } else {
+            window.location.href = 'https://www.instagram.com/accounts/settings/';
+          }
+        })();
+        true;
+      `);
     }
   };
 

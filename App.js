@@ -108,12 +108,6 @@ const INJECTED_CSS_AND_PRELOAD = `
           height: 48px !important;
         }
 
-        /* Profile page layout spacing: prevent fixed header from cutting off avatar & username */
-        main, section, div[role="main"] {
-          padding-top: 28px !important;
-          padding-bottom: 100px !important;
-        }
-
         /* Ensure avatar circle is never clipped */
         main header img,
         main section img {
@@ -220,21 +214,8 @@ const INJECTED_CSS_AND_PRELOAD = `
 
 const INJECTED_JAVASCRIPT = `
   (function() {
-    // 1. Prevent unwanted client redirects to edit profile
-    const preventEditProfileRedirect = () => {
-      if (window.location.pathname.includes('/accounts/edit/')) {
-        const referrer = document.referrer;
-        if (!referrer.includes('/accounts/edit/')) {
-          window.location.href = 'https://www.instagram.com/me/';
-        }
-      }
-    };
-
-    // 2. Target-Specific Clean Dark Theme & Layout Fix
-    const applyCleanDarkTheme = () => {
-      preventEditProfileRedirect();
-
-      // Root dark background
+    // 1. Force strict dark mode across all views including DMs (/direct/inbox/)
+    const applyGlobalDarkTheme = () => {
       document.documentElement.classList.add('dark');
       document.documentElement.style.setProperty('background-color', '#000000', 'important');
       document.documentElement.style.setProperty('color-scheme', 'dark', 'important');
@@ -242,18 +223,21 @@ const INJECTED_JAVASCRIPT = `
         document.body.style.setProperty('background-color', '#000000', 'important');
       }
 
-      const styleId = 'anchor-perfect-profile-fix';
+      const styleId = 'anchor-master-dark-theme';
       if (!document.getElementById(styleId)) {
         const style = document.createElement('style');
         style.id = styleId;
         style.innerHTML = \`
-          /* Pure Black Backgrounds for containers without breaking flex alignment */
-          html, body, #react-root, main[role="main"], section._a9_0 {
+          /* Pure Black Background across all view containers & DMs */
+          html, body, #react-root, main, section, div, header, nav,
+          div[role="main"], div[role="navigation"], section._a9_0,
+          div[role="listbox"], div[role="list"], div[aria-label*="Direct" i],
+          div[data-pagelet*="Direct"], article {
             background-color: #000000 !important;
           }
 
-          /* Fix Low Contrast / Muddy Text: Force all heading, span, and paragraph text to clean crisp white */
-          h1, h2, h3, span, p, a, div[role="button"] {
+          /* Force all dark/grey text to crisp high-contrast white */
+          h1, h2, h3, h4, span, p, a, label, input, textarea, div[role="button"] {
             color: #FFFFFF !important;
           }
 
@@ -266,6 +250,18 @@ const INJECTED_JAVASCRIPT = `
           /* Fix Muted Bio Text */
           div._aa_c, div._aa_d, span._aacl {
             color: #E0E0E0 !important;
+          }
+
+          /* DM Chat List Fixes */
+          div[role="listbox"], div[role="list"], div[aria-label*="Direct" i] {
+            background-color: #000000 !important;
+          }
+
+          /* Input Search Bar Dark Fix */
+          input, label {
+            background-color: #121212 !important;
+            color: #FFFFFF !important;
+            border-radius: 12px !important;
           }
 
           /* Reset broken height/padding overrides that caused big spacing gaps */
@@ -286,8 +282,10 @@ const INJECTED_JAVASCRIPT = `
             background-color: rgba(255, 255, 255, 0.08) !important;
           }
 
-          /* Ensure 'Use the App' banner remains strictly hidden */
+          /* Nuke "Use the App" Banners */
           div[style*="position: fixed"][style*="bottom: 0"],
+          div[style*="bottom"][aria-label*="app" i],
+          a[href*="instagram://"],
           [aria-label*="Use the app" i],
           [aria-label*="Get the app" i],
           .smartbanner {
@@ -296,6 +294,22 @@ const INJECTED_JAVASCRIPT = `
             visibility: hidden !important;
             pointer-events: none !important;
             height: 0 !important;
+          }
+
+          /* Force Instagram internal CSS theme variables to pure dark */
+          :root, html, body {
+            --primary-background: #000000 !important;
+            --secondary-background: #121212 !important;
+            --primary-text: #FFFFFF !important;
+            --secondary-text: #E0E0E0 !important;
+            --ig-primary-background: #000000 !important;
+            --ig-secondary-background: #121212 !important;
+            --ig-primary-text: #FFFFFF !important;
+            --ig-secondary-text: #E0E0E0 !important;
+            --ig-elevated-background: #181818 !important;
+            --ig-stroke: #262626 !important;
+            --card-background: #000000 !important;
+            color-scheme: dark !important;
           }
         \`;
         (document.head || document.documentElement).appendChild(style);
@@ -353,19 +367,18 @@ const INJECTED_JAVASCRIPT = `
     };
 
     // Run immediately and every 300ms during page load
-    preventEditProfileRedirect();
-    applyCleanDarkTheme();
-    const interval = setInterval(applyCleanDarkTheme, 300);
-    setTimeout(() => clearInterval(interval), 10000); // Stop polling after 10s
+    applyGlobalDarkTheme();
+    const interval = setInterval(applyGlobalDarkTheme, 300);
+    setTimeout(() => clearInterval(interval), 10000);
 
     // Continuous DOM Observer
-    const observer = new MutationObserver(applyCleanDarkTheme);
+    const observer = new MutationObserver(applyGlobalDarkTheme);
     observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
 
     // Expose for native callbacks
-    window.__anchorClean = applyCleanDarkTheme;
+    window.__anchorClean = applyGlobalDarkTheme;
 
-    // 4. Detect logged-in username for instant Profile tab navigation
+    // 2. Detect logged-in username dynamically from React session / DOM
     function detectUser() {
       if (window.__ANCHOR_USER__) return;
       try {
@@ -382,6 +395,7 @@ const INJECTED_JAVASCRIPT = `
         }
 
         var link = document.querySelector('a[href^="/"][role="link"]:has(img[alt*="profile picture" i])') ||
+                   document.querySelector('a[href*="/"][role="link"]:has(img)') ||
                    document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])');
         if (link) {
           var u2 = (link.getAttribute('href') || '').replace(/\\//g, '').split('?')[0];
@@ -398,44 +412,48 @@ const INJECTED_JAVASCRIPT = `
     detectUser();
     setInterval(detectUser, 1500);
 
-    // 5. Fast direct tab router helper callable from native
+    // 3. Fast direct tab router with bulletproof Profile fallback (never 404s)
     window.__anchorRoute = function(destination) {
       if (destination === 'activity') {
-        var heart = document.querySelector('svg[aria-label*="Activity" i], svg[aria-label*="Notification" i], a[href*="/activity"]');
-        var btn = heart ? heart.closest('a, button, div[role="button"]') : null;
-        if (btn) {
-          btn.click();
-        } else {
-          window.location.href = 'https://www.instagram.com/?activity=1';
-        }
+        window.location.href = 'https://www.instagram.com/accounts/activity/';
       } else if (destination === 'messages') {
-        if (!window.location.pathname.includes('/direct/')) {
-          window.location.href = 'https://www.instagram.com/direct/inbox/';
-        }
+        window.location.href = 'https://www.instagram.com/direct/inbox/';
       } else if (destination === 'profile') {
-        let username = window.__ANCHOR_USER__ || null;
+        let handle = window.__ANCHOR_USER__ || null;
         try {
           const userMeta = document.querySelector('meta[property="al:ios:url"]');
           if (userMeta && userMeta.content) {
-            username = userMeta.content.split('user?username=')[1];
+            handle = userMeta.content.split('user?username=')[1];
           }
         } catch (e) {}
 
-        if (!username) {
-          const profileAnchor = document.querySelector('a[href*="/"][role="link"]:has(img)') ||
-                                document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])');
-          if (profileAnchor && profileAnchor.getAttribute('href')) {
-            username = profileAnchor.getAttribute('href').replace(/\\//g, '').split('?')[0];
+        if (!handle) {
+          const profileLink = document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])') ||
+                              document.querySelector('a[href*="/"][role="link"]:has(img)');
+          if (profileLink && profileLink.getAttribute('href')) {
+            const h = profileLink.getAttribute('href').replace(/\\//g, '').split('?')[0];
+            if (h && !['explore', 'reels', 'direct', 'stories', 'accounts'].includes(h)) {
+              handle = h;
+            }
           }
         }
 
-        if (username && !username.includes('accounts') && !username.includes('edit')) {
-          window.location.href = 'https://www.instagram.com/' + username + '/';
+        if (handle && !handle.includes('accounts') && !handle.includes('explore')) {
+          window.location.href = 'https://www.instagram.com/' + handle + '/';
         } else {
-          window.location.href = 'https://www.instagram.com/me/';
+          // Native DOM click fallback prevents "Page isn't available" errors
+          const profileBtn = document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])') ||
+                             document.querySelector('a[href*="/"][role="link"]:has(img)') ||
+                             document.querySelector('a[aria-label*="Profile" i]');
+          if (profileBtn) {
+            profileBtn.click();
+          } else {
+            window.location.href = 'https://www.instagram.com/';
+          }
         }
       } else if (destination === 'settings') {
-        window.location.href = 'https://www.instagram.com/accounts/settings/';
+        // Direct to Instagram Edit Profile / Settings view rather than Meta Accounts Centre
+        window.location.href = 'https://www.instagram.com/accounts/edit/';
       }
     };
   })();
@@ -554,23 +572,53 @@ function MainScreen() {
       useNativeDriver: true,
     }).start();
 
-    if (!webViewRef.current) return;
-
-    // Use fast in-page router helper with fallback
-    if (tab === 'profile' && loggedInUser) {
-      webViewRef.current.injectJavaScript(`window.location.href = 'https://www.instagram.com/${loggedInUser}/'; true;`);
-    } else {
-      webViewRef.current.injectJavaScript(`
-        if (typeof window.__anchorRoute === 'function') {
-          window.__anchorRoute('${tab}');
-        } else {
-          ${tab === 'activity' ? "window.location.href = 'https://www.instagram.com/?activity=1';" : ''}
-          ${tab === 'messages' ? "window.location.href = 'https://www.instagram.com/direct/inbox/';" : ''}
-          ${tab === 'profile' ? "window.location.href = 'https://www.instagram.com/me/';" : ''}
-          ${tab === 'settings' ? "window.location.href = 'https://www.instagram.com/accounts/settings/';" : ''}
-        }
-        true;
-      `);
+    if (tab === 'activity') {
+      webViewRef.current.injectJavaScript("window.location.href = 'https://www.instagram.com/accounts/activity/'; true;");
+    } else if (tab === 'messages') {
+      webViewRef.current.injectJavaScript("window.location.href = 'https://www.instagram.com/direct/inbox/'; true;");
+    } else if (tab === 'profile') {
+      if (loggedInUser) {
+        webViewRef.current.injectJavaScript(`window.location.href = 'https://www.instagram.com/${loggedInUser}/'; true;`);
+      } else {
+        const resolveProfileJS = `
+          (function() {
+            if (typeof window.__anchorRoute === 'function') {
+              window.__anchorRoute('profile');
+              return;
+            }
+            let handle = null;
+            try {
+              const userMeta = document.querySelector('meta[property="al:ios:url"]');
+              if (userMeta && userMeta.content) {
+                handle = userMeta.content.split('user?username=')[1];
+              }
+            } catch(e) {}
+            if (!handle) {
+              const profileLink = document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])') ||
+                                  document.querySelector('a[href*="/"][role="link"]:has(img)');
+              if (profileLink && profileLink.getAttribute('href')) {
+                const href = profileLink.getAttribute('href');
+                if (href && !href.includes('accounts') && !href.includes('explore')) {
+                  handle = href.replace(/\\//g, '').split('?')[0];
+                }
+              }
+            }
+            if (handle) {
+              window.location.href = 'https://www.instagram.com/' + handle + '/';
+            } else {
+              const profileBtn = document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])') ||
+                                 document.querySelector('a[href*="/"][role="link"]:has(img)') ||
+                                 document.querySelector('a[aria-label*="Profile" i]');
+              if (profileBtn) profileBtn.click();
+              else window.location.href = 'https://www.instagram.com/';
+            }
+          })();
+          true;
+        `;
+        webViewRef.current.injectJavaScript(resolveProfileJS);
+      }
+    } else if (tab === 'settings') {
+      webViewRef.current.injectJavaScript("window.location.href = 'https://www.instagram.com/accounts/edit/'; true;");
     }
   };
 

@@ -354,6 +354,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                         border: 1px solid rgba(255, 255, 255, 0.25) !important;
                         background-color: rgba(255, 255, 255, 0.08) !important;
                     }
+
+                    /* DM Chat List Fixes & Input Dark Fix */
+                    div[role="listbox"], div[role="list"], div[aria-label*="Direct" i] {
+                        background-color: #000000 !important;
+                    }
+
+                    input, label {
+                        background-color: #121212 !important;
+                        color: #FFFFFF !important;
+                        border-radius: 12px !important;
+                    }
                 `;
                 (document.head || document.documentElement).appendChild(style);
             }
@@ -1526,7 +1537,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
             if (username && !username.includes('accounts') && !username.includes('edit')) {
                 window.location.href = 'https://www.instagram.com/' + username + '/';
             } else {
-                window.location.href = 'https://www.instagram.com/me/';
+                const profileBtn = document.querySelector('a[href^="/"] img[alt*="profile picture" i]')?.closest('a') ||
+                                   document.querySelector('a[aria-label*="Profile" i]');
+                if (profileBtn) {
+                    profileBtn.click();
+                } else {
+                    window.location.href = 'https://www.instagram.com/';
+                }
             }
         })();
         """
@@ -1539,7 +1556,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
             return
         }
         self.currentTab = "settings"
-        if let url = URL(string: "https://www.instagram.com/accounts/settings/") {
+        if let url = URL(string: "https://www.instagram.com/accounts/edit/") {
             webView.load(URLRequest(url: url))
         }
     }

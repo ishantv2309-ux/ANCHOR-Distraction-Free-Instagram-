@@ -297,14 +297,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                     /* Eradicate Use the app banner, app download prompts, and bottom upsell cards */
                     div[data-testid*="app-upsell"],
                     div[data-testid*="open-in-app"],
+                    div[data-testid*="smart-banner"],
                     div[role="banner"],
                     a[href*="instagram.com/download"],
                     a[href*="play.google.com"],
-                    a[href*="apps.apple.com"] {
+                    a[href*="apps.apple.com"],
+                    a[href*="instagram://"],
+                    .smartbanner,
+                    [aria-label*="Use the app" i],
+                    [aria-label*="Get the app" i],
+                    [aria-label*="Open in app" i],
+                    div[style*="position: fixed"][style*="bottom: 0"],
+                    div[style*="position: fixed"][style*="bottom:0"],
+                    div[style*="position:fixed"][style*="bottom: 0"],
+                    div[style*="position:fixed"][style*="bottom:0"],
+                    div[style*="bottom"][aria-label*="app" i] {
                         display: none !important;
+                        opacity: 0 !important;
                         visibility: hidden !important;
                         pointer-events: none !important;
                         height: 0 !important;
+                        max-height: 0 !important;
                     }
 
                     #anchor-exit {
@@ -389,10 +402,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                     }
 
                     /* Contain Reel video viewports and modal overlays within screen dimensions */
-                    div[role="dialog"], 
-                    section, 
-                    main, 
-                    article, 
+                    div[role="dialog"]:has(video), 
+                    section:has(video), 
+                    main:has(video), 
+                    article:has(video), 
                     div:has(> video) {
                         width: 100% !important;
                         max-width: 100vw !important;
@@ -758,19 +771,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                     const allLinks = document.querySelectorAll('a, button, span, div');
                     for (let i = 0; i < allLinks.length; i++) {
                         const el = allLinks[i];
-                        const text = (el.innerText || el.textContent || '').trim().toLowerCase();
-                        if (text === 'use the app' || text === 'open in app' || text === 'get the app') {
+                        const text = (el.innerText || el.textContent || '').toLowerCase();
+                        if (text.includes('use the app') || text.includes('open in app') || text.includes('get the app')) {
                             let parent = el;
-                            while (parent && parent !== document.body && parent !== document.documentElement) {
+                            for (let d = 0; d < 6; d++) {
+                                if (!parent || parent === document.body || parent === document.documentElement || parent.tagName === 'MAIN') break;
                                 const comp = window.getComputedStyle(parent);
-                                if (comp.position === 'fixed' || comp.position === 'sticky') {
+                                if (comp.position === 'fixed' || comp.position === 'sticky' || parent.getAttribute('role') === 'dialog' || parent.getAttribute('role') === 'banner') {
                                     parent.remove();
                                     break;
                                 }
                                 parent = parent.parentElement;
-                            }
-                            if (parent && parent !== document.body) {
-                                parent.remove();
                             }
                         }
                     }
@@ -805,15 +816,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                     const el = topCandidates[i];
                     const rect = el.getBoundingClientRect();
                     if (rect.top <= 90 && rect.height > 0 && rect.height <= 60) {
-                        const raw = (el.innerText || el.textContent || '').trim();
-                        const hasChevron = raw.includes('∨') || raw.includes('⌄') || raw.includes('▼');
                         const clean = raw.split('\\n')[0].replace(/[∨⌄▼v\\s]/g, '');
                         if (/^[a-zA-Z0-9._]{3,30}$/.test(clean) && !ignored.includes(clean.toLowerCase())) {
-                            if (hasChevron) {
-                                window.__ANCHOR_USERNAME__ = clean;
-                                try { window.webkit.messageHandlers.anchor.postMessage({ type: "USER", username: clean }); } catch(e) {}
-                                return;
-                            }
+                            window.__ANCHOR_USERNAME__ = clean;
+                            try { window.webkit.messageHandlers.anchor.postMessage({ type: "USER", username: clean }); } catch(e) {}
+                            return;
                         }
                     }
                 }
@@ -1298,8 +1305,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         rootContainer.addSubview(webView)
         window.contentView = rootContainer
 
-        // Load Default Tab: Messages (/direct/inbox/)
-        if let url = URL(string: "https://www.instagram.com/direct/inbox/") {
+        // Load Initial Tab (or URL argument)
+        var initialUrl = "https://www.instagram.com/direct/inbox/"
+        if CommandLine.arguments.count > 1 && !CommandLine.arguments[1].isEmpty {
+            let arg = CommandLine.arguments[1]
+            if arg.starts(with: "http") {
+                initialUrl = arg
+            } else {
+                initialUrl = "https://www.instagram.com/\(arg)/"
+            }
+        }
+        if let url = URL(string: initialUrl) {
             webView.load(URLRequest(url: url))
         }
 
@@ -1492,9 +1508,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
     @objc func selectProfileTab() {
         self.activeTargetReelId = nil
-        if self.currentTab == "profile" {
-            return
-        }
         self.currentTab = "profile"
         if let user = self.detectedUsername, !user.isEmpty {
             if let url = URL(string: "https://www.instagram.com/\(user)/") {
@@ -1504,13 +1517,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         }
         let js = """
         (function() {
-            let username = null;
-            try {
-                const userMeta = document.querySelector('meta[property="al:ios:url"]');
-                if (userMeta && userMeta.content) {
-                    username = userMeta.content.split('user?username=')[1];
+            let username = window.__ANCHOR_USERNAME__ || null;
+            if (!username) {
+                try {
+                    const userMeta = document.querySelector('meta[property="al:ios:url"]');
+                    if (userMeta && userMeta.content) {
+                        username = userMeta.content.split('user?username=')[1];
+                    }
+                } catch(e) {}
+            }
+            if (!username) {
+                const topCandidates = document.querySelectorAll('header span, header h1, header button span, header div[role="button"]');
+                const ignored = ['direct', 'inbox', 'messages', 'instagram', 'search', 'notifications', 'activity', 'cancel', 'edit', 'settings', 'options', 'requests', 'chats', 'notes', 'explore', 'reels', 'accounts', 'stories'];
+                for (let i = 0; i < topCandidates.length; i++) {
+                    const clean = (topCandidates[i].textContent || '').trim().split('\\n')[0].replace(/[∨⌄▼\\s]/g, '');
+                    if (/^[a-zA-Z0-9._]{3,30}$/.test(clean) && !ignored.includes(clean.toLowerCase())) {
+                        username = clean;
+                        break;
+                    }
                 }
-            } catch(e) {}
+            }
             if (!username) {
                 const avatar = document.querySelector('a[href^="/"] img[alt*="profile picture" i]')?.closest('a') ||
                                document.querySelector('a[aria-label*="Profile" i]');

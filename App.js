@@ -310,6 +310,20 @@ const INJECTED_JAVASCRIPT = `
             if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOGGED_IN_USER', username: u2 }));
             }
+            return;
+          }
+        }
+
+        // 3. Check direct header text or active account switcher
+        const headerEls = document.querySelectorAll('header span, header h1, header button span, header div[role="button"]');
+        for (let i = 0; i < headerEls.length; i++) {
+          const raw = (headerEls[i].textContent || '').trim().split('\\n')[0].replace(/[∨⌄▼v\\s]/g, '');
+          if (/^[a-zA-Z0-9._]{3,30}$/.test(raw) && !['explore', 'reels', 'direct', 'stories', 'accounts', 'messages', 'notifications', 'search', 'settings'].includes(raw.toLowerCase())) {
+            window.__ANCHOR_USER__ = raw;
+            if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOGGED_IN_USER', username: raw }));
+            }
+            return;
           }
         }
       } catch(e) {}

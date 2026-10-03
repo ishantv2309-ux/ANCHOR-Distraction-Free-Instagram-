@@ -7,6 +7,16 @@ import Svg, { Path, Circle } from 'react-native-svg';
 // Injected CSS and lightweight DOM helpers
 const INJECTED_CSS_AND_PRELOAD = `
   (function() {
+    if (document.documentElement) {
+      document.documentElement.classList.add('dark');
+      document.documentElement.style.setProperty('background-color', '#000000', 'important');
+      document.documentElement.style.setProperty('color-scheme', 'dark', 'important');
+    }
+    if (document.body) {
+      document.body.style.setProperty('background-color', '#000000', 'important');
+      document.body.style.setProperty('color', '#ffffff', 'important');
+    }
+
     let meta = document.querySelector('meta[name="viewport"]');
     if (!meta) {
       meta = document.createElement('meta');
@@ -209,76 +219,114 @@ const INJECTED_CSS_AND_PRELOAD = `
 
 const INJECTED_JAVASCRIPT = `
   (function() {
-    // 1. Safe Non-Destructive DOM Cleaner Function
-    window.__anchorClean = function() {
-      try {
-        // Target ONLY elements at the very bottom with small bar height (35px - 65px)
-        var candidates = document.querySelectorAll('nav, footer, div');
-        for (var i = 0; i < candidates.length; i++) {
-          var el = candidates[i];
-          if (el.closest('header')) continue;
-          if (el.tagName === 'MAIN' || el.getAttribute('role') === 'main') continue;
-
-          var h = el.offsetHeight;
-          if (h >= 35 && h <= 65) {
-            var rect = el.getBoundingClientRect();
-            if (rect.bottom >= (window.innerHeight - 15) && rect.top > 100) {
-              if (el.querySelector('a[href="/"], svg[aria-label*="Home" i], svg[aria-label*="Search" i], a[href*="/explore/"]')) {
-                el.style.setProperty('display', 'none', 'important');
-                el.style.setProperty('visibility', 'hidden', 'important');
-                el.style.setProperty('height', '0px', 'important');
-                el.style.setProperty('pointer-events', 'none', 'important');
-              }
-            }
-          }
-        }
-
-        // Hide Threads promotional buttons in header
-        var threads = document.querySelectorAll('a[href*="threads.net"], svg[aria-label*="Threads" i]');
-        for (var t = 0; t < threads.length; t++) {
-          var tBtn = threads[t].closest('a, button, div[role="button"]') || threads[t];
-          tBtn.style.setProperty('display', 'none', 'important');
-        }
-
-        // Hide Camera/Story button in header
-        var camera = document.querySelectorAll('header a[href*="/stories/create"], header svg[aria-label*="Camera" i], header svg[aria-label*="Story" i]');
-        for (var c = 0; c < camera.length; c++) {
-          var cBtn = camera[c].closest('a, button, div[role="button"]') || camera[c];
-          cBtn.style.setProperty('display', 'none', 'important');
-        }
-
-        // DOM fallback: query and hide elements containing "Use the app" or app promo text directly
-        document.querySelectorAll('div, a, span').forEach(function(el) {
-          if (el.textContent && (el.textContent.includes('Use the app') || el.textContent.includes('Get the app') || el.textContent.includes('Open app'))) {
-            var bannerContainer = el.closest('div[style*="position: fixed"]') || el.closest('div[style*="bottom"]') || el.closest('aside');
-            if (bannerContainer && !bannerContainer.closest('header') && bannerContainer.tagName !== 'MAIN') {
-              bannerContainer.style.setProperty('display', 'none', 'important');
-              bannerContainer.style.setProperty('visibility', 'hidden', 'important');
-              bannerContainer.style.setProperty('height', '0px', 'important');
-              bannerContainer.style.setProperty('pointer-events', 'none', 'important');
-            }
-          }
-        });
-      } catch(err) {}
+    // 1. Force Root Dark Theme immediately
+    const forceDarkTheme = () => {
+      document.documentElement.classList.add('dark');
+      document.documentElement.style.setProperty('background-color', '#000000', 'important');
+      document.documentElement.style.setProperty('color-scheme', 'dark', 'important');
+      if (document.body) {
+        document.body.style.setProperty('background-color', '#000000', 'important');
+        document.body.style.setProperty('color', '#ffffff', 'important');
+      }
     };
 
-    // Run immediately and periodically
-    window.__anchorClean();
-    setInterval(window.__anchorClean, 400);
+    // 2. Permanently Nuke "Use the App" banners and force bottom padding
+    const nukeBannersAndFixLayout = () => {
+      forceDarkTheme();
 
-    // MutationObserver to catch dynamically rendered elements
-    var observer = new MutationObserver(function() {
-      window.__anchorClean();
-    });
-    if (document.body) {
-      observer.observe(document.body, { childList: true, subtree: true });
-    } else {
-      document.addEventListener('DOMContentLoaded', function() {
-        observer.observe(document.body, { childList: true, subtree: true });
+      // Inject strict global styles
+      const styleId = 'anchor-permanent-fix';
+      if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.innerHTML = \`
+          /* Force dark background on all main Instagram containers */
+          html, body, #react-root, main, section, div[role="main"] {
+            background-color: #000000 !important;
+            color: #ffffff !important;
+          }
+
+          /* Hide bottom app banners */
+          div[style*="position: fixed"][style*="bottom: 0"]:not([style*="top: 0"]),
+          div[style*="bottom"][aria-label*="app" i],
+          a[href*="instagram://"],
+          [aria-label*="Use the app" i],
+          [aria-label*="Get the app" i],
+          .smartbanner {
+            display: none !important;
+            opacity: 0 !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
+            height: 0 !important;
+          }
+
+          /* Add safe bottom offset for native floating bar */
+          main, section, div[role="main"] {
+            padding-bottom: 110px !important;
+          }
+        \`;
+        (document.head || document.documentElement).appendChild(style);
+      }
+
+      // Hard DOM Node Purge (scans text nodes and obliterates matching banner containers)
+      const elements = document.querySelectorAll('div, a, span, button');
+      elements.forEach(el => {
+        const text = el.innerText || el.textContent || '';
+        if (text.includes('Use the app') || text.includes('Open in app') || text.includes('Get the app')) {
+          // Find fixed/sticky parent container holding the banner
+          let current = el;
+          for (let i = 0; i < 5; i++) {
+            if (!current || !current.parentElement) break;
+            if (current.tagName === 'BODY' || current.tagName === 'HTML' || current.tagName === 'MAIN') break;
+            const style = window.getComputedStyle(current);
+            if (style.position === 'fixed' || style.position === 'sticky' || current.getAttribute('role') === 'dialog') {
+              current.remove(); // Nuke the node completely
+              return;
+            }
+            current = current.parentElement;
+          }
+        }
       });
-    }
 
-    // 2. Detect logged-in username for instant Profile tab navigation
+      // Target original bottom navigation bar if present
+      var bottomCandidates = document.querySelectorAll('nav, footer, div');
+      for (var i = 0; i < bottomCandidates.length; i++) {
+        var c = bottomCandidates[i];
+        if (c.closest('header') || c.tagName === 'MAIN' || c.getAttribute('role') === 'main') continue;
+        var h = c.offsetHeight;
+        if (h >= 35 && h <= 65) {
+          var rect = c.getBoundingClientRect();
+          if (rect.bottom >= (window.innerHeight - 15) && rect.top > 100) {
+            if (c.querySelector('a[href="/"], svg[aria-label*="Home" i], svg[aria-label*="Search" i], a[href*="/explore/"]')) {
+              c.style.setProperty('display', 'none', 'important');
+              c.style.setProperty('visibility', 'hidden', 'important');
+              c.style.setProperty('height', '0px', 'important');
+              c.style.setProperty('pointer-events', 'none', 'important');
+            }
+          }
+        }
+      }
+
+      // Hide Threads and Camera/Story from header
+      document.querySelectorAll('a[href*="threads.net"], svg[aria-label*="Threads" i], header a[href*="/stories/create"], header svg[aria-label*="Camera" i], header svg[aria-label*="Story" i]').forEach(function(el) {
+        var t = el.closest('a, button, div[role="button"]') || el;
+        t.style.setProperty('display', 'none', 'important');
+      });
+    };
+
+    // Run immediately and every 300ms during page load
+    nukeBannersAndFixLayout();
+    const interval = setInterval(nukeBannersAndFixLayout, 300);
+    setTimeout(() => clearInterval(interval), 10000); // Stop polling after 10s
+
+    // Continuous DOM Observer
+    const observer = new MutationObserver(nukeBannersAndFixLayout);
+    observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+
+    // Expose for native callbacks
+    window.__anchorClean = nukeBannersAndFixLayout;
+
+    // 3. Detect logged-in username for instant Profile tab navigation
     function detectUser() {
       if (window.__ANCHOR_USER__) return;
       try {
@@ -299,7 +347,7 @@ const INJECTED_JAVASCRIPT = `
     detectUser();
     setInterval(detectUser, 1500);
 
-    // 3. Fast direct tab router helper callable from native
+    // 4. Fast direct tab router helper callable from native
     window.__anchorRoute = function(destination) {
       if (destination === 'activity') {
         var heart = document.querySelector('svg[aria-label*="Activity" i], svg[aria-label*="Notification" i], a[href*="/activity"]');

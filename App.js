@@ -201,9 +201,10 @@ const INJECTED_CSS_AND_PRELOAD = `
           max-height: 0 !important;
         }
 
-        /* Ensure body and scroll containers have bottom padding so web content isn't covered by our native floating bar */
-        body, html, main, section, div[role="main"], article {
-          padding-bottom: 96px !important;
+        /* Controlled safe area for native floating bottom bar ONLY on the main scroll view */
+        main[role="main"] {
+          padding-bottom: 90px !important;
+          margin-bottom: 0 !important;
           box-sizing: border-box !important;
         }
 
@@ -229,38 +230,64 @@ const INJECTED_JAVASCRIPT = `
       }
     };
 
-    // 2. Force Root Dark Theme immediately
-    const forceDarkTheme = () => {
+    // 2. Target-Specific Clean Dark Theme & Layout Fix
+    const applyCleanDarkTheme = () => {
+      preventEditProfileRedirect();
+
+      // Root dark background
       document.documentElement.classList.add('dark');
       document.documentElement.style.setProperty('background-color', '#000000', 'important');
       document.documentElement.style.setProperty('color-scheme', 'dark', 'important');
       if (document.body) {
         document.body.style.setProperty('background-color', '#000000', 'important');
-        document.body.style.setProperty('color', '#ffffff', 'important');
       }
-    };
 
-    // 3. Permanently Nuke "Use the App" banners and force bottom padding
-    const nukeBannersAndFixLayout = () => {
-      forceDarkTheme();
-      preventEditProfileRedirect();
-
-      // Inject strict global styles
-      const styleId = 'anchor-permanent-fix';
+      const styleId = 'anchor-perfect-profile-fix';
       if (!document.getElementById(styleId)) {
         const style = document.createElement('style');
         style.id = styleId;
         style.innerHTML = \`
-          /* Force dark background on all main Instagram containers */
-          html, body, #react-root, main, section, div[role="main"] {
+          /* Pure Black Backgrounds for containers without breaking flex alignment */
+          html, body, #react-root, main[role="main"], section._a9_0 {
             background-color: #000000 !important;
-            color: #ffffff !important;
           }
 
-          /* Hide bottom app banners */
-          div[style*="position: fixed"][style*="bottom: 0"]:not([style*="top: 0"]),
-          div[style*="bottom"][aria-label*="app" i],
-          a[href*="instagram://"],
+          /* Fix Low Contrast / Muddy Text: Force all heading, span, and paragraph text to clean crisp white */
+          h1, h2, h3, span, p, a, div[role="button"] {
+            color: #FFFFFF !important;
+          }
+
+          /* Keep secondary stats (posts, followers, following) crisp and visible */
+          span._ac2a, span._ac2b, ul li span, div span {
+            color: #F5F5F5 !important;
+            opacity: 1 !important;
+          }
+
+          /* Fix Muted Bio Text */
+          div._aa_c, div._aa_d, span._aacl {
+            color: #E0E0E0 !important;
+          }
+
+          /* Reset broken height/padding overrides that caused big spacing gaps */
+          main, section, div {
+            min-height: auto !important;
+          }
+
+          /* Controlled safe area for native floating bottom bar ONLY on the main scroll view */
+          main[role="main"] {
+            padding-bottom: 90px !important;
+            margin-bottom: 0 !important;
+          }
+
+          /* Style 'Edit Profile' and 'View Archive' buttons with crisp glass borders */
+          a[href*="/accounts/edit/"], 
+          div[role="button"]:has(span) {
+            border: 1px solid rgba(255, 255, 255, 0.25) !important;
+            background-color: rgba(255, 255, 255, 0.08) !important;
+          }
+
+          /* Ensure 'Use the App' banner remains strictly hidden */
+          div[style*="position: fixed"][style*="bottom: 0"],
           [aria-label*="Use the app" i],
           [aria-label*="Get the app" i],
           .smartbanner {
@@ -270,28 +297,28 @@ const INJECTED_JAVASCRIPT = `
             pointer-events: none !important;
             height: 0 !important;
           }
-
-          /* Add safe bottom offset for native floating bar */
-          main, section, div[role="main"] {
-            padding-bottom: 110px !important;
-          }
         \`;
         (document.head || document.documentElement).appendChild(style);
       }
 
-      // Hard DOM Node Purge (scans text nodes and obliterates matching banner containers)
+      // Safe non-destructive hiding of banner elements by text content
       const elements = document.querySelectorAll('div, a, span, button');
       elements.forEach(el => {
         const text = el.innerText || el.textContent || '';
         if (text.includes('Use the app') || text.includes('Open in app') || text.includes('Get the app')) {
-          // Find fixed/sticky parent container holding the banner
           let current = el;
           for (let i = 0; i < 5; i++) {
             if (!current || !current.parentElement) break;
             if (current.tagName === 'BODY' || current.tagName === 'HTML' || current.tagName === 'MAIN') break;
             const style = window.getComputedStyle(current);
             if (style.position === 'fixed' || style.position === 'sticky' || current.getAttribute('role') === 'dialog') {
-              current.remove(); // Nuke the node completely
+              current.style.setProperty('display', 'none', 'important');
+              current.style.setProperty('visibility', 'hidden', 'important');
+              current.style.setProperty('height', '0px', 'important');
+              current.style.setProperty('max-height', '0px', 'important');
+              current.style.setProperty('opacity', '0', 'important');
+              current.style.setProperty('pointer-events', 'none', 'important');
+              current.style.setProperty('z-index', '-9999', 'important');
               return;
             }
             current = current.parentElement;
@@ -327,16 +354,16 @@ const INJECTED_JAVASCRIPT = `
 
     // Run immediately and every 300ms during page load
     preventEditProfileRedirect();
-    nukeBannersAndFixLayout();
-    const interval = setInterval(nukeBannersAndFixLayout, 300);
+    applyCleanDarkTheme();
+    const interval = setInterval(applyCleanDarkTheme, 300);
     setTimeout(() => clearInterval(interval), 10000); // Stop polling after 10s
 
     // Continuous DOM Observer
-    const observer = new MutationObserver(nukeBannersAndFixLayout);
+    const observer = new MutationObserver(applyCleanDarkTheme);
     observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
 
     // Expose for native callbacks
-    window.__anchorClean = nukeBannersAndFixLayout;
+    window.__anchorClean = applyCleanDarkTheme;
 
     // 4. Detect logged-in username for instant Profile tab navigation
     function detectUser() {
@@ -579,6 +606,9 @@ function MainScreen() {
         style={styles.webview}
         domStorageEnabled={true}
         javaScriptEnabled={true}
+        sharedCookiesEnabled={true}
+        thirdPartyCookiesEnabled={true}
+        originWhitelist={['*']}
         mixedContentMode="always"
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}

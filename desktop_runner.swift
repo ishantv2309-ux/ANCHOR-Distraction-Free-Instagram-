@@ -334,6 +334,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                         -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
                         border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
                     }
+
+                    /* Fix Low Contrast / Muddy Text: Force all heading, span, and paragraph text to clean crisp white */
+                    h1, h2, h3, span, p, a, div[role="button"] {
+                        color: #FFFFFF !important;
+                    }
+
+                    span._ac2a, span._ac2b, ul li span, div span {
+                        color: #F5F5F5 !important;
+                        opacity: 1 !important;
+                    }
+
+                    div._aa_c, div._aa_d, span._aacl {
+                        color: #E0E0E0 !important;
+                    }
+
+                    a[href*="/accounts/edit/"], 
+                    div[role="button"]:has(span) {
+                        border: 1px solid rgba(255, 255, 255, 0.25) !important;
+                        background-color: rgba(255, 255, 255, 0.08) !important;
+                    }
                 `;
                 (document.head || document.documentElement).appendChild(style);
             }

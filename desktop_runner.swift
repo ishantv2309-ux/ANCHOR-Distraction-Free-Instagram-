@@ -349,10 +349,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                         color: #E0E0E0 !important;
                     }
 
-                    a[href*="/accounts/edit/"], 
-                    div[role="button"]:has(span) {
-                        border: 1px solid rgba(255, 255, 255, 0.25) !important;
-                        background-color: rgba(255, 255, 255, 0.08) !important;
+                    /* REMOVE ALL ACCIDENTAL BOX OUTLINES/BORDERS */
+                    div, span, a, label, form {
+                        box-shadow: none !important;
+                    }
+
+                    /* HIDE SAVED / BOOKMARK TAB ON PROFILE PAGE */
+                    a[href*="/saved/"],
+                    div[role="tab"]:has(svg[aria-label="Saved"]),
+                    div[role="tab"]:has(svg[aria-label*="Saved" i]),
+                    svg[aria-label="Saved"],
+                    svg[aria-label*="Saved" i] {
+                        display: none !important;
                     }
 
                     /* DM Chat List Fixes & Input Dark Fix */
@@ -1556,7 +1564,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
             return
         }
         self.currentTab = "settings"
-        if let url = URL(string: "https://www.instagram.com/accounts/edit/") {
+        if let url = URL(string: "https://www.instagram.com/settings/") {
             webView.load(URLRequest(url: url))
         }
     }

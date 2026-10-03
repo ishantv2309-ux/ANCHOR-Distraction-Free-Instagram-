@@ -223,66 +223,44 @@ const INJECTED_JAVASCRIPT = `
         document.body.style.setProperty('background-color', '#000000', 'important');
       }
 
-      const styleId = 'anchor-master-dark-theme';
+      const styleId = 'anchor-clean-ui-v2';
       if (!document.getElementById(styleId)) {
         const style = document.createElement('style');
         style.id = styleId;
         style.innerHTML = \`
-          /* Pure Black Background across all view containers & DMs */
-          html, body, #react-root, main, section, div, header, nav,
-          div[role="main"], div[role="navigation"], section._a9_0,
-          div[role="listbox"], div[role="list"], div[aria-label*="Direct" i],
-          div[data-pagelet*="Direct"], article {
+          /* Pure dark container backgrounds */
+          html, body, #react-root, main, section, div[role="main"] {
             background-color: #000000 !important;
           }
 
-          /* Force all dark/grey text to crisp high-contrast white */
-          h1, h2, h3, h4, span, p, a, label, input, textarea, div[role="button"] {
+          /* Global High Contrast Text Fix */
+          h1, h2, h3, h4, span, p, a, label {
             color: #FFFFFF !important;
           }
 
-          /* Keep secondary stats (posts, followers, following) crisp and visible */
-          span._ac2a, span._ac2b, ul li span, div span {
-            color: #F5F5F5 !important;
-            opacity: 1 !important;
+          /* REMOVE ALL ACCIDENTAL BOX OUTLINES/BORDERS INJECTED PREVIOUSLY */
+          div, span, a, label, form {
+            box-shadow: none !important;
           }
 
-          /* Fix Muted Bio Text */
-          div._aa_c, div._aa_d, span._aacl {
-            color: #E0E0E0 !important;
-          }
-
-          /* DM Chat List Fixes */
-          div[role="listbox"], div[role="list"], div[aria-label*="Direct" i] {
-            background-color: #000000 !important;
-          }
-
-          /* Input Search Bar Dark Fix */
-          input, label {
+          /* Clean input box styling without bright white wireframes */
+          input, textarea, select {
             background-color: #121212 !important;
+            border: 1px solid #262626 !important;
             color: #FFFFFF !important;
-            border-radius: 12px !important;
+            border-radius: 8px !important;
           }
 
-          /* Reset broken height/padding overrides that caused big spacing gaps */
-          main, section, div {
-            min-height: auto !important;
+          /* HIDE SAVED / BOOKMARK TAB ON PROFILE PAGE */
+          a[href*="/saved/"],
+          div[role="tab"]:has(svg[aria-label="Saved"]),
+          div[role="tab"]:has(svg[aria-label*="Saved" i]),
+          svg[aria-label="Saved"],
+          svg[aria-label*="Saved" i] {
+            display: none !important;
           }
 
-          /* Controlled safe area for native floating bottom bar ONLY on the main scroll view */
-          main[role="main"] {
-            padding-bottom: 90px !important;
-            margin-bottom: 0 !important;
-          }
-
-          /* Style 'Edit Profile' and 'View Archive' buttons with crisp glass borders */
-          a[href*="/accounts/edit/"], 
-          div[role="button"]:has(span) {
-            border: 1px solid rgba(255, 255, 255, 0.25) !important;
-            background-color: rgba(255, 255, 255, 0.08) !important;
-          }
-
-          /* Nuke "Use the App" Banners */
+          /* Hide "Use the App" Banners */
           div[style*="position: fixed"][style*="bottom: 0"],
           div[style*="bottom"][aria-label*="app" i],
           a[href*="instagram://"],
@@ -296,7 +274,12 @@ const INJECTED_JAVASCRIPT = `
             height: 0 !important;
           }
 
-          /* Force Instagram internal CSS theme variables to pure dark */
+          /* Bottom safe area for floating native bar */
+          main, section, div[role="main"] {
+            padding-bottom: 95px !important;
+          }
+
+          /* Instagram theme variables */
           :root, html, body {
             --primary-background: #000000 !important;
             --secondary-background: #121212 !important;
@@ -452,8 +435,7 @@ const INJECTED_JAVASCRIPT = `
           }
         }
       } else if (destination === 'settings') {
-        // Direct to Instagram Edit Profile / Settings view rather than Meta Accounts Centre
-        window.location.href = 'https://www.instagram.com/accounts/edit/';
+        window.location.href = 'https://www.instagram.com/settings/';
       }
     };
   })();
@@ -618,7 +600,7 @@ function MainScreen() {
         webViewRef.current.injectJavaScript(resolveProfileJS);
       }
     } else if (tab === 'settings') {
-      webViewRef.current.injectJavaScript("window.location.href = 'https://www.instagram.com/accounts/edit/'; true;");
+      webViewRef.current.injectJavaScript("window.location.href = 'https://www.instagram.com/settings/'; true;");
     }
   };
 

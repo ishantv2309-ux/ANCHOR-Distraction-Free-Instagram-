@@ -41,20 +41,7 @@ const INJECTED_CSS_AND_PRELOAD = `
           overflow: hidden !important;
         }
 
-        /* 2. Completely & Permanently Eradicate Instagram Mobile Web Bottom Bar */
-        nav:not(header nav),
-        nav[role="navigation"]:not(header *),
-        div[role="navigation"]:not(header *),
-        div[style*="position: fixed"]:has(a[href="/"]):not(header *),
-        div[style*="position: fixed"]:has(svg[aria-label*="Home" i]):not(header *),
-        div[style*="position: fixed"]:has(svg[aria-label*="Search" i]):not(header *),
-        div[style*="position: fixed"]:has(img[alt*="profile picture" i]):not(header *),
-        div[style*="bottom: 0px"]:not(body > div:first-child),
-        div[style*="bottom: 0"]:not(body > div:first-child),
-        div[style*="bottom:0"]:not(body > div:first-child),
-        body > div div:has(> a[href="/"]):has(> a[href*="/direct/"]),
-        body > div div:has(> a[href="/"]):has(> a[href*="/explore/"]),
-        div:has(> div > a[href="/"]):has(a[href*="/direct/"]),
+        /* 2. Completely Eradicate Instagram Mobile Web Bottom Bar */
         footer[role="contentinfo"],
         footer,
         div[data-testid="bottom-nav"],
@@ -197,45 +184,43 @@ const INJECTED_CSS_AND_PRELOAD = `
 
 const INJECTED_JAVASCRIPT = `
   (function() {
-    // 1. Permanent DOM Cleaner Function
+    // 1. Safe Non-Destructive DOM Cleaner Function
     window.__anchorClean = function() {
       try {
-        // Eradicate Instagram Mobile Web Bottom Bar permanently
-        // Remove any nav elements outside header
-        document.querySelectorAll('nav:not(header nav), div[role="navigation"]:not(header *)').forEach(function(el) {
-          if (!el.closest('header')) {
-            el.remove();
-          }
-        });
+        // Target ONLY elements at the very bottom with small bar height (35px - 65px)
+        var candidates = document.querySelectorAll('nav, footer, div');
+        for (var i = 0; i < candidates.length; i++) {
+          var el = candidates[i];
+          if (el.closest('header')) continue;
+          if (el.tagName === 'MAIN' || el.getAttribute('role') === 'main') continue;
 
-        // Remove any fixed element at the bottom of the viewport
-        document.querySelectorAll('div, footer, section').forEach(function(el) {
-          if (el.closest('header')) return;
-          try {
-            var style = window.getComputedStyle(el);
-            if (style.position === 'fixed' || style.position === 'sticky') {
-              var b = parseInt(style.bottom);
-              if (b <= 5 || style.bottom === '0px') {
-                if (el.querySelector('a[href="/"], svg[aria-label*="Home" i], svg[aria-label*="Search" i], svg[aria-label*="Explore" i], svg[aria-label*="Reels" i], a[href*="/direct/"], img[alt*="profile picture" i]')) {
-                  el.remove();
-                }
+          var h = el.offsetHeight;
+          if (h >= 35 && h <= 65) {
+            var rect = el.getBoundingClientRect();
+            if (rect.bottom >= (window.innerHeight - 15) && rect.top > 100) {
+              if (el.querySelector('a[href="/"], svg[aria-label*="Home" i], svg[aria-label*="Search" i], a[href*="/explore/"]')) {
+                el.style.setProperty('display', 'none', 'important');
+                el.style.setProperty('visibility', 'hidden', 'important');
+                el.style.setProperty('height', '0px', 'important');
+                el.style.setProperty('pointer-events', 'none', 'important');
               }
             }
-          } catch(e) {}
-        });
-
-        // Remove Threads and Story/Camera clutter from header
-        document.querySelectorAll('a[href*="threads.net"], svg[aria-label*="Threads" i], header a[href*="/stories/create"], header svg[aria-label*="Camera" i], header svg[aria-label*="Story" i]').forEach(function(el) {
-          var container = el.closest('a, button, div[role="button"]') || el;
-          container.remove();
-        });
-
-        // Remove Suggested/Discover people clutter safely
-        document.querySelectorAll('button, a').forEach(function(btn) {
-          if (btn.querySelector('svg[aria-label*="Discover" i], svg[aria-label*="Similar" i]') || (btn.href && btn.href.indexOf('/similar_accounts/') !== -1)) {
-            btn.remove();
           }
-        });
+        }
+
+        // Hide Threads promotional buttons in header
+        var threads = document.querySelectorAll('a[href*="threads.net"], svg[aria-label*="Threads" i]');
+        for (var t = 0; t < threads.length; t++) {
+          var tBtn = threads[t].closest('a, button, div[role="button"]') || threads[t];
+          tBtn.style.setProperty('display', 'none', 'important');
+        }
+
+        // Hide Camera/Story button in header
+        var camera = document.querySelectorAll('header a[href*="/stories/create"], header svg[aria-label*="Camera" i], header svg[aria-label*="Story" i]');
+        for (var c = 0; c < camera.length; c++) {
+          var cBtn = camera[c].closest('a, button, div[role="button"]') || camera[c];
+          cBtn.style.setProperty('display', 'none', 'important');
+        }
       } catch(err) {}
     };
 
@@ -476,6 +461,7 @@ function MainScreen() {
         scalesPageToFit={false}
         allowsInlineMediaPlayback={true}
         mediaPlaybackRequiresUserAction={false}
+        userAgent="Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
         allowsBackForwardNavigationGestures={true}
         injectedJavaScriptBeforeContentLoaded={INJECTED_CSS_AND_PRELOAD}
         injectedJavaScript={INJECTED_JAVASCRIPT}

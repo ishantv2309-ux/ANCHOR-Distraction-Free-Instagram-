@@ -245,8 +245,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                     }
 
                     /* Completely eradicate Instagram's web bottom navigation bar and all its lingering icons */
-                    div[role="tablist"],
-                    [role="tablist"],
                     footer[role="contentinfo"],
                     nav[role="navigation"],
                     div[data-testid="bottom-nav"],
@@ -316,42 +314,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                         cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
                     }
 
-                    /* Permanent Profile Section Protection & Stability Shield */
-                    body:not(.anchor-reel-isolated) main,
-                    body:not(.anchor-reel-isolated) section {
-                        overflow-y: auto !important;
-                        -webkit-overflow-scrolling: touch !important;
-                        height: auto !important;
-                        max-height: none !important;
+                    /* Native Dark Theme Palette & Root Containers */
+                    :root, html, body {
+                        --primary-background: #000000 !important;
+                        --secondary-background: #121212 !important;
+                        --ig-primary-background: #000000 !important;
+                        --ig-secondary-background: #121212 !important;
+                        --ig-stroke: #262626 !important;
+                        --card-background: #000000 !important;
+                        color-scheme: dark !important;
                     }
 
-                    /* Web Glassmorphism: Translucent Frosted Glass UI on Web Headers & Dialogs */
-                    header[role="banner"],
-                    div[role="dialog"] > div:first-child,
-                    nav[role="navigation"]:not([style*="display: none"]) {
-                        background-color: rgba(18, 18, 18, 0.72) !important;
-                        backdrop-filter: blur(16px) saturate(180%) !important;
-                        -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
-                        border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-                    }
-
-                    /* Fix Low Contrast / Muddy Text: Force all heading, span, and paragraph text to clean crisp white */
-                    h1, h2, h3, span, p, a, div[role="button"] {
-                        color: #FFFFFF !important;
-                    }
-
-                    span._ac2a, span._ac2b, ul li span, div span {
-                        color: #F5F5F5 !important;
-                        opacity: 1 !important;
-                    }
-
-                    div._aa_c, div._aa_d, span._aacl {
-                        color: #E0E0E0 !important;
-                    }
-
-                    /* REMOVE ALL ACCIDENTAL BOX OUTLINES/BORDERS */
-                    div, span, a, label, form {
-                        box-shadow: none !important;
+                    html, body, #react-root, main[role="main"] {
+                        background-color: #000000 !important;
                     }
 
                     /* HIDE SAVED / BOOKMARK TAB ON PROFILE PAGE */
@@ -368,10 +343,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                         background-color: #000000 !important;
                     }
 
-                    input, label {
+                    input, textarea, select {
                         background-color: #121212 !important;
+                        border: 1px solid #262626 !important;
                         color: #FFFFFF !important;
-                        border-radius: 12px !important;
+                        border-radius: 8px !important;
                     }
                 `;
                 (document.head || document.documentElement).appendChild(style);

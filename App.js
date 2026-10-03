@@ -14,8 +14,13 @@ const INJECTED_CSS_AND_PRELOAD = `
     }
     if (document.body) {
       document.body.style.setProperty('background-color', '#000000', 'important');
-      document.body.style.setProperty('color', '#ffffff', 'important');
+      document.body.style.setProperty('color-scheme', 'dark', 'important');
     }
+
+    try {
+      document.cookie = "theme=dark; path=/; max-age=31536000; domain=.instagram.com";
+      document.cookie = "theme=dark; path=/; max-age=31536000";
+    } catch(e) {}
 
     let meta = document.querySelector('meta[name="viewport"]');
     if (!meta) {
@@ -31,7 +36,7 @@ const INJECTED_CSS_AND_PRELOAD = `
       const style = document.createElement('style');
       style.id = 'anchor-speed-styles';
       style.innerHTML = \`
-        /* 1. Eliminate clutter, Reels tabs, Explore tabs, and home buttons */
+        /* 1. Eliminate clutter: Reels tabs and Explore tabs */
         a[href*="/reels/"], 
         a[href^="/reels/"], 
         a[aria-label*="Reels" i], 
@@ -57,9 +62,7 @@ const INJECTED_CSS_AND_PRELOAD = `
         div[data-testid="bottom-nav"],
         div[data-testid="mobile-nav-bar"],
         div[data-testid="tab-bar"],
-        div[data-testid="bottom_bar"],
-        div[data-testid*="app-upsell"],
-        div[data-testid*="open-in-app"] {
+        div[data-testid="bottom_bar"] {
           display: none !important; 
           visibility: hidden !important;
           pointer-events: none !important;
@@ -69,114 +72,27 @@ const INJECTED_CSS_AND_PRELOAD = `
           opacity: 0 !important;
         }
 
-        /* 3. Remove Profile Tab Unnecessary Clutter & Buttons */
-        /* Threads promotional buttons */
+        /* 3. Hide Threads and Suggested Clutter without breaking Header flexbox */
         a[href*="threads.net"],
         a[aria-label*="Threads" i],
         svg[aria-label*="Threads" i],
-        div[role="button"]:has(svg[aria-label*="Threads" i]),
-        div:has(> a[href*="threads.net"]),
-        /* Camera / Create story buttons in profile header */
-        header a[href*="/stories/create"],
-        header svg[aria-label*="Camera" i],
-        header svg[aria-label*="Story" i],
-        header svg[aria-label*="Stories" i],
-        header div[role="button"]:has(svg[aria-label*="Camera" i]),
-        header div[role="button"]:has(svg[aria-label*="Story" i]),
-        /* Suggested accounts & discover people in profile */
         button:has(svg[aria-label*="Discover" i]),
         button:has(svg[aria-label*="Similar" i]),
         a[href*="/similar_accounts/"],
         div[data-testid*="suggested" i],
-        /* Reposts / Loop / Reels tabs in profile */
         div[role="tablist"] a[href*="/reels/"],
-        div[role="tablist"] a[href*="/channel/"],
-        /* Native app upsell banners & buttons */
-        a[href*="instagram://"],
-        div:has(> a[href*="instagram://"]) {
+        div[role="tablist"] a[href*="/channel/"] {
           display: none !important;
-          visibility: hidden !important;
-          pointer-events: none !important;
-          height: 0 !important;
-          overflow: hidden !important;
         }
 
-        /* 4. Fix Profile UI: Clean Header, Spacing, and No Overlapping/Clipping */
-        header[role="banner"] {
-          background-color: #000000 !important;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-          height: 48px !important;
+        /* 4. Hide Saved / Bookmark Tab on Profile */
+        a[href*="/saved/"],
+        div[role="tab"]:has(svg[aria-label*="Saved" i]),
+        svg[aria-label*="Saved" i] {
+          display: none !important;
         }
 
-        /* Ensure avatar circle is never clipped */
-        main header img,
-        main section img {
-          border-radius: 50% !important;
-          object-fit: cover !important;
-        }
-
-        /* Style Profile Action Buttons (Edit Profile, View Archive) into modern pills */
-        main section a[href*="/accounts/edit/"],
-        main section a[href*="/archive/"] {
-          border-radius: 9999px !important;
-          background: rgba(255, 255, 255, 0.12) !important;
-          border: 1px solid rgba(255, 255, 255, 0.20) !important;
-          color: #ffffff !important;
-          font-weight: 600 !important;
-          padding: 8px 16px !important;
-        }
-
-        /* Clean Profile Grid Tablist */
-        div[role="tablist"] {
-          border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-          background-color: transparent !important;
-        }
-
-        /* 5. Modern Pill Toast Notifications & Alerts */
-        .toast-bar, 
-        div[role="alert"], 
-        div[role="status"],
-        div[class*="toast" i],
-        div[class*="Toast" i],
-        div[data-testid*="toast" i] {
-          border-radius: 9999px !important; /* Forces maximum pill curves */
-          padding: 12px 24px !important;
-          background: rgba(22, 22, 22, 0.85) !important;
-          -webkit-backdrop-filter: blur(16px) !important;
-          backdrop-filter: blur(16px) !important;
-          border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
-          
-          /* Smooth Hover Transition */
-          transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
-          overflow: hidden !important;
-        }
-
-        /* Curvy Glass Hover & Active States */
-        .toast-bar:hover, 
-        div[role="alert"]:hover, 
-        div[role="status"]:hover,
-        div[class*="toast" i]:hover,
-        div[class*="Toast" i]:hover,
-        div[data-testid*="toast" i]:hover {
-          transform: translateY(-2px) scale(1.03) !important; /* Subtle tactile lift */
-          border-radius: 9999px !important;
-          border-color: rgba(255, 255, 255, 0.4) !important;
-          background: rgba(32, 32, 32, 0.92) !important;
-          box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 
-                      0 0 16px rgba(255, 255, 255, 0.1) !important; /* Soft outer glow */
-        }
-
-        /* Prevent Edge Clipping on parent containers */
-        div:has(> div[role="alert"]),
-        div:has(> div[role="status"]),
-        div:has(> .toast-bar),
-        div:has(> div[class*="toast" i]) {
-          overflow: visible !important;
-        }
-
-        /* Permanently hide Instagram "Use the app" sticky bottom banners and open-in-app prompts */
+        /* 5. Permanently hide Instagram "Use the app" sticky bottom banners */
         a[href*="instagram://"],
         a[href*="itunes.apple.com"],
         a[href*="play.google.com"],
@@ -184,6 +100,7 @@ const INJECTED_CSS_AND_PRELOAD = `
         [aria-label*="Get the app" i],
         [aria-label*="Use the app" i],
         [aria-label*="Open in app" i],
+        div[style*="position: fixed"][style*="bottom: 0"],
         div[data-testid*="app-upsell"],
         div[data-testid*="open-in-app"],
         div[data-testid*="smart-banner"] {
@@ -195,15 +112,27 @@ const INJECTED_CSS_AND_PRELOAD = `
           max-height: 0 !important;
         }
 
-        /* Controlled safe area for native floating bottom bar ONLY on the main scroll view */
+        /* 6. Controlled safe bottom clearance ONLY on root scrollable main container */
         main[role="main"] {
-          padding-bottom: 90px !important;
+          padding-bottom: 95px !important;
           margin-bottom: 0 !important;
           box-sizing: border-box !important;
         }
 
-        body, html { 
-          background-color: #000000 !important; 
+        /* 7. Strict Pure Black Background on root containers */
+        html, body, #react-root {
+          background-color: #000000 !important;
+        }
+
+        /* 8. Enable Instagram Native Dark Palette Variables */
+        :root, html, body {
+          color-scheme: dark !important;
+          --primary-background: #000000 !important;
+          --secondary-background: #121212 !important;
+          --ig-primary-background: #000000 !important;
+          --ig-secondary-background: #121212 !important;
+          --ig-stroke: #262626 !important;
+          --card-background: #000000 !important;
         }
       \`;
       (document.head || document.documentElement).appendChild(style);
@@ -224,79 +153,73 @@ const INJECTED_JAVASCRIPT = `
       }
 
       const styleId = 'anchor-clean-ui-v2';
-      if (!document.getElementById(styleId)) {
-        const style = document.createElement('style');
+      let style = document.getElementById(styleId);
+      if (!style) {
+        style = document.createElement('style');
         style.id = styleId;
-        style.innerHTML = \`
-          /* Pure dark container backgrounds */
-          html, body, #react-root, main, section, div[role="main"] {
-            background-color: #000000 !important;
-          }
-
-          /* Global High Contrast Text Fix */
-          h1, h2, h3, h4, span, p, a, label {
-            color: #FFFFFF !important;
-          }
-
-          /* REMOVE ALL ACCIDENTAL BOX OUTLINES/BORDERS INJECTED PREVIOUSLY */
-          div, span, a, label, form {
-            box-shadow: none !important;
-          }
-
-          /* Clean input box styling without bright white wireframes */
-          input, textarea, select {
-            background-color: #121212 !important;
-            border: 1px solid #262626 !important;
-            color: #FFFFFF !important;
-            border-radius: 8px !important;
-          }
-
-          /* HIDE SAVED / BOOKMARK TAB ON PROFILE PAGE */
-          a[href*="/saved/"],
-          div[role="tab"]:has(svg[aria-label="Saved"]),
-          div[role="tab"]:has(svg[aria-label*="Saved" i]),
-          svg[aria-label="Saved"],
-          svg[aria-label*="Saved" i] {
-            display: none !important;
-          }
-
-          /* Hide "Use the App" Banners */
-          div[style*="position: fixed"][style*="bottom: 0"],
-          div[style*="bottom"][aria-label*="app" i],
-          a[href*="instagram://"],
-          [aria-label*="Use the app" i],
-          [aria-label*="Get the app" i],
-          .smartbanner {
-            display: none !important;
-            opacity: 0 !important;
-            visibility: hidden !important;
-            pointer-events: none !important;
-            height: 0 !important;
-          }
-
-          /* Bottom safe area for floating native bar */
-          main, section, div[role="main"] {
-            padding-bottom: 95px !important;
-          }
-
-          /* Instagram theme variables */
-          :root, html, body {
-            --primary-background: #000000 !important;
-            --secondary-background: #121212 !important;
-            --primary-text: #FFFFFF !important;
-            --secondary-text: #E0E0E0 !important;
-            --ig-primary-background: #000000 !important;
-            --ig-secondary-background: #121212 !important;
-            --ig-primary-text: #FFFFFF !important;
-            --ig-secondary-text: #E0E0E0 !important;
-            --ig-elevated-background: #181818 !important;
-            --ig-stroke: #262626 !important;
-            --card-background: #000000 !important;
-            color-scheme: dark !important;
-          }
-        \`;
         (document.head || document.documentElement).appendChild(style);
       }
+      style.innerHTML = \`
+        /* Pure dark root containers */
+        html, body, #react-root, main[role="main"] {
+          background-color: #000000 !important;
+        }
+
+        /* Direct messages and list dark styling */
+        div[role="listbox"], div[role="list"], div[aria-label*="Direct" i] {
+          background-color: #000000 !important;
+        }
+
+        /* Clean input box styling without bright white wireframes */
+        input, textarea, select {
+          background-color: #121212 !important;
+          border: 1px solid #262626 !important;
+          color: #FFFFFF !important;
+          border-radius: 8px !important;
+        }
+
+        /* HIDE SAVED / BOOKMARK TAB ON PROFILE PAGE */
+        a[href*="/saved/"],
+        div[role="tab"]:has(svg[aria-label="Saved"]),
+        div[role="tab"]:has(svg[aria-label*="Saved" i]),
+        svg[aria-label="Saved"],
+        svg[aria-label*="Saved" i] {
+          display: none !important;
+        }
+
+        /* Hide "Use the App" Banners */
+        div[style*="position: fixed"][style*="bottom: 0"],
+        div[style*="bottom"][aria-label*="app" i],
+        a[href*="instagram://"],
+        [aria-label*="Use the app" i],
+        [aria-label*="Get the app" i],
+        .smartbanner {
+          display: none !important;
+          opacity: 0 !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+          height: 0 !important;
+        }
+
+        /* Safe clearance ONLY on root main container - Never on sections */
+        main[role="main"] {
+          padding-bottom: 95px !important;
+          margin-bottom: 0 !important;
+          box-sizing: border-box !important;
+        }
+
+        /* Instagram theme variables - Pure dark theme with authentic contrast */
+        :root, html, body {
+          --primary-background: #000000 !important;
+          --secondary-background: #121212 !important;
+          --ig-primary-background: #000000 !important;
+          --ig-secondary-background: #121212 !important;
+          --ig-stroke: #262626 !important;
+          --card-background: #000000 !important;
+          color-scheme: dark !important;
+        }
+      \`;
+    };
 
       // Safe non-destructive hiding of banner elements by text content
       const elements = document.querySelectorAll('div, a, span, button');

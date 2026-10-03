@@ -1489,14 +1489,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         }
         let js = """
         (function() {
-            const avatar = document.querySelector('a[href^="/"] img[alt*="profile picture" i]')?.closest('a') ||
-                           document.querySelector('a[aria-label*="Profile" i]');
-            if (avatar && avatar.getAttribute('href')) {
-                window.location.href = avatar.href;
-            } else if (avatar) {
-                avatar.click();
+            let username = null;
+            try {
+                const userMeta = document.querySelector('meta[property="al:ios:url"]');
+                if (userMeta && userMeta.content) {
+                    username = userMeta.content.split('user?username=')[1];
+                }
+            } catch(e) {}
+            if (!username) {
+                const avatar = document.querySelector('a[href^="/"] img[alt*="profile picture" i]')?.closest('a') ||
+                               document.querySelector('a[aria-label*="Profile" i]');
+                if (avatar && avatar.getAttribute('href')) {
+                    username = avatar.getAttribute('href').replace(/\\//g, '').split('?')[0];
+                }
+            }
+            if (username && !username.includes('accounts') && !username.includes('edit')) {
+                window.location.href = 'https://www.instagram.com/' + username + '/';
             } else {
-                window.location.href = 'https://www.instagram.com/accounts/edit/';
+                window.location.href = 'https://www.instagram.com/me/';
             }
         })();
         """

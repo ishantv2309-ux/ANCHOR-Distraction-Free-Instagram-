@@ -172,6 +172,31 @@ const INJECTED_CSS_AND_PRELOAD = `
           overflow: visible !important;
         }
 
+        /* Permanently hide Instagram "Use the app" sticky bottom banners and open-in-app prompts */
+        a[href*="instagram://"],
+        a[href*="itunes.apple.com"],
+        a[href*="play.google.com"],
+        .smartbanner,
+        [aria-label*="Get the app" i],
+        [aria-label*="Use the app" i],
+        [aria-label*="Open in app" i],
+        div[data-testid*="app-upsell"],
+        div[data-testid*="open-in-app"],
+        div[data-testid*="smart-banner"] {
+          display: none !important;
+          opacity: 0 !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+          height: 0 !important;
+          max-height: 0 !important;
+        }
+
+        /* Ensure body and scroll containers have bottom padding so web content isn't covered by our native floating bar */
+        body, html, main, section, div[role="main"], article {
+          padding-bottom: 96px !important;
+          box-sizing: border-box !important;
+        }
+
         body, html { 
           background-color: #000000 !important; 
         }
@@ -221,6 +246,19 @@ const INJECTED_JAVASCRIPT = `
           var cBtn = camera[c].closest('a, button, div[role="button"]') || camera[c];
           cBtn.style.setProperty('display', 'none', 'important');
         }
+
+        // DOM fallback: query and hide elements containing "Use the app" or app promo text directly
+        document.querySelectorAll('div, a, span').forEach(function(el) {
+          if (el.textContent && (el.textContent.includes('Use the app') || el.textContent.includes('Get the app') || el.textContent.includes('Open app'))) {
+            var bannerContainer = el.closest('div[style*="position: fixed"]') || el.closest('div[style*="bottom"]') || el.closest('aside');
+            if (bannerContainer && !bannerContainer.closest('header') && bannerContainer.tagName !== 'MAIN') {
+              bannerContainer.style.setProperty('display', 'none', 'important');
+              bannerContainer.style.setProperty('visibility', 'hidden', 'important');
+              bannerContainer.style.setProperty('height', '0px', 'important');
+              bannerContainer.style.setProperty('pointer-events', 'none', 'important');
+            }
+          }
+        });
       } catch(err) {}
     };
 

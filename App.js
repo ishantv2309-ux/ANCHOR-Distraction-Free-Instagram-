@@ -14,13 +14,13 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { WebView } from 'react-native-webview';
 import Svg, { Path, Circle } from 'react-native-svg';
 
-// Minimal, non-destructive script that lets Instagram render its 100% native UI
+// Injected JavaScript that enforces native dark/light theme, strips outlines, and purges clutter
 const getInjectedJS = (isDark) => `
   (function() {
     const isDarkMode = ${isDark};
     const themeClass = isDarkMode ? 'dark' : 'light';
 
-    // 1. Sync native theme cookies so Instagram server & client render the original theme
+    // 1. Sync theme cookies so Instagram server & client render the original theme
     try {
       document.cookie = "theme=" + themeClass + "; path=/; max-age=31536000; domain=.instagram.com";
       document.cookie = "theme=" + themeClass + "; path=/; max-age=31536000";
@@ -41,7 +41,7 @@ const getInjectedJS = (isDark) => `
       if (document.documentElement) {
         document.documentElement.classList.remove('light', 'dark');
         document.documentElement.classList.add(themeClass);
-        document.documentElement.style.setProperty('color-scheme', themeClass);
+        document.documentElement.style.setProperty('color-scheme', themeClass, 'important');
       }
 
       const styleId = 'anchor-native-shield';
@@ -53,20 +53,82 @@ const getInjectedJS = (isDark) => `
       }
 
       style.innerHTML = \`
-        /* Remove artificial outline rings */
+        /* 1. Global Box Shadow and Outline Purge - Remove artificial wireframes */
         * {
+          box-shadow: none !important;
           outline: none !important;
           -webkit-tap-highlight-color: transparent !important;
         }
 
-        /* Safe bottom clearance strictly on root main scroll container - Never on sections */
+        /* 2. System Dark/Light Root Background */
+        html, body, #react-root {
+          background-color: \${isDarkMode ? '#000000' : '#FFFFFF'} !important;
+        }
+
+        /* 3. High-Contrast Text Legibility */
+        h1, h2, h3, h4, p, a, label, span {
+          color: \${isDarkMode ? '#FFFFFF' : '#000000'} !important;
+        }
+
+        /* 4. Instagram CSS Theme Variables */
+        :root, html, body {
+          color-scheme: \${themeClass} !important;
+          --primary-background: \${isDarkMode ? '#000000' : '#FFFFFF'} !important;
+          --secondary-background: \${isDarkMode ? '#121212' : '#FAFAFA'} !important;
+          --primary-text: \${isDarkMode ? '#FFFFFF' : '#000000'} !important;
+          --secondary-text: \${isDarkMode ? '#F5F5F5' : '#262626'} !important;
+          --ig-primary-background: \${isDarkMode ? '#000000' : '#FFFFFF'} !important;
+          --ig-secondary-background: \${isDarkMode ? '#121212' : '#FAFAFA'} !important;
+          --ig-primary-text: \${isDarkMode ? '#FFFFFF' : '#000000'} !important;
+          --ig-secondary-text: \${isDarkMode ? '#F5F5F5' : '#262626'} !important;
+          --ig-stroke: \${isDarkMode ? '#262626' : '#DBDBDB'} !important;
+          --card-background: \${isDarkMode ? '#000000' : '#FFFFFF'} !important;
+        }
+
+        /* 5. Safe bottom scrolling clearance strictly on root main container */
         main[role="main"] {
-          padding-bottom: 85px !important;
+          padding-bottom: 90px !important;
           margin-bottom: 0 !important;
           box-sizing: border-box !important;
         }
 
-        /* 1. Distraction-Free: Hide Reels tabs and Explore tabs */
+        /* 6. Clean up profile page: Hide saved bookmark links and saved icons */
+        a[href*="/saved/"],
+        div[role="tab"]:has(svg[aria-label="Saved"]),
+        div[role="tab"]:has(svg[aria-label*="Saved" i]),
+        svg[aria-label="Saved"],
+        svg[aria-label*="Saved" i] {
+          display: none !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+          height: 0 !important;
+        }
+
+        /* 7. Hide "Use the app" sticky bottom banners, download prompts & smart banners */
+        div[style*="position: fixed"][style*="bottom: 0"],
+        div[style*="position: fixed"][style*="bottom:0"],
+        div[style*="position:fixed"][style*="bottom: 0"],
+        div[style*="position:fixed"][style*="bottom:0"],
+        div[style*="bottom"][aria-label*="app" i],
+        a[href*="instagram://"],
+        a[href*="itunes.apple.com"],
+        a[href*="play.google.com"],
+        .smartbanner,
+        [aria-label*="Use the app" i],
+        [aria-label*="Get the app" i],
+        [aria-label*="Open in app" i],
+        div[data-testid*="app-upsell"],
+        div[data-testid*="open-in-app"],
+        div[data-testid*="smart-banner"] {
+          display: none !important;
+          opacity: 0 !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+          height: 0 !important;
+          max-height: 0 !important;
+        }
+
+        /* 8. Distraction-Free: Hide Reels tabs and Explore tabs */
         a[href*="/reels/"], 
         a[href^="/reels/"], 
         a[aria-label*="Reels" i], 
@@ -77,7 +139,8 @@ const getInjectedJS = (isDark) => `
         a[href^="/explore/"], 
         a[aria-label*="Explore" i], 
         svg[aria-label*="Explore" i],
-        div[data-testid="explore-tab"] { 
+        div[data-testid="explore-tab"],
+        a[href="/"] svg[aria-label*="Home" i] { 
           display: none !important; 
           visibility: hidden !important;
           pointer-events: none !important;
@@ -85,7 +148,7 @@ const getInjectedJS = (isDark) => `
           overflow: hidden !important;
         }
 
-        /* 2. Position web bottom nav offscreen so its profile anchor remains clickable */
+        /* 9. Position web bottom nav offscreen so its profile anchor remains accessible */
         footer[role="contentinfo"],
         div[data-testid="bottom-nav"],
         div[data-testid="mobile-nav-bar"],
@@ -98,7 +161,7 @@ const getInjectedJS = (isDark) => `
           height: 0 !important;
         }
 
-        /* 3. Hide Threads and Suggested Clutter */
+        /* 10. Hide Threads and Suggested Clutter */
         a[href*="threads.net"],
         a[aria-label*="Threads" i],
         svg[aria-label*="Threads" i],
@@ -109,31 +172,6 @@ const getInjectedJS = (isDark) => `
         div[role="tablist"] a[href*="/reels/"],
         div[role="tablist"] a[href*="/channel/"] {
           display: none !important;
-        }
-
-        /* 4. Hide Saved tab from profile */
-        a[href*="/saved/"],
-        div[role="tab"]:has(svg[aria-label*="Saved" i]),
-        svg[aria-label*="Saved" i] {
-          display: none !important;
-        }
-
-        /* 5. Suppress "Use the app" sticky bottom banners */
-        a[href*="instagram://"],
-        a[href*="itunes.apple.com"],
-        a[href*="play.google.com"],
-        .smartbanner,
-        [aria-label*="Get the app" i],
-        [aria-label*="Use the app" i],
-        [aria-label*="Open in app" i],
-        div[data-testid*="app-upsell"],
-        div[data-testid*="open-in-app"],
-        div[data-testid*="smart-banner"] {
-          display: none !important;
-          opacity: 0 !important;
-          visibility: hidden !important;
-          pointer-events: none !important;
-          height: 0 !important;
         }
       \`;
     };
@@ -185,7 +223,18 @@ const getInjectedJS = (isDark) => `
           }
         }
 
-        // 2. Bottom nav profile anchor
+        // 2. Meta tag
+        const userMeta = document.querySelector('meta[property="al:ios:url"]');
+        if (userMeta && userMeta.content) {
+          const u = userMeta.content.split('user?username=')[1];
+          if (u && !ignored.includes(u.toLowerCase())) {
+            window.__ANCHOR_USER__ = u;
+            if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOGGED_IN_USER', username: u }));
+            return;
+          }
+        }
+
+        // 3. Bottom nav profile anchor
         const anchors = document.querySelectorAll('a[href^="/"]');
         for (let i = 0; i < anchors.length; i++) {
           const a = anchors[i];
@@ -199,7 +248,7 @@ const getInjectedJS = (isDark) => `
           }
         }
 
-        // 3. Avatar alt text
+        // 4. Avatar alt text
         const avatars = document.querySelectorAll('img[alt*="profile picture" i]');
         for (let i = 0; i < avatars.length; i++) {
           const match = (avatars[i].alt || '').match(/^([^'’]+)['’]s profile picture/i);
@@ -210,7 +259,7 @@ const getInjectedJS = (isDark) => `
           }
         }
 
-        // 4. Header title in Direct Inbox
+        // 5. Header title in Direct Inbox
         const headerEls = document.querySelectorAll('header span, header h1, header button span, header div[role="button"]');
         for (let i = 0; i < headerEls.length; i++) {
           const raw = (headerEls[i].textContent || '').trim().split('\\n')[0].replace(/[∨⌄▼v\\s]/g, '');
@@ -233,11 +282,11 @@ const getInjectedJS = (isDark) => `
       } else if (destination === 'messages') {
         window.location.href = 'https://www.instagram.com/direct/inbox/';
       } else if (destination === 'profile') {
-        // Try native bottom bar click first (preserves Single Page App routing)
+        // Try native bottom bar click first (preserves React Single Page App routing)
         const profileBtn = document.querySelector('footer a[href^="/"]:has(img), div[data-testid*="nav"] a[href^="/"]:has(img), div[data-testid*="tab"] a[href^="/"]:has(img), div[role="tablist"] a[href^="/"]:has(img)');
         if (profileBtn && profileBtn.getAttribute('href')) {
           const href = profileBtn.getAttribute('href').replace(/^\\/+|\\/+$/g, '');
-          if (href && !['explore', 'reels', 'direct'].includes(href)) {
+          if (href && !['explore', 'reels', 'direct', 'messages'].includes(href)) {
             profileBtn.click();
             return;
           }
@@ -252,7 +301,7 @@ const getInjectedJS = (isDark) => `
         if (handle) {
           window.location.href = 'https://www.instagram.com/' + handle + '/';
         } else {
-          // Final fallback to own profile
+          // Final fallback
           const anyAvatarLink = document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])');
           if (anyAvatarLink) {
             anyAvatarLink.click();

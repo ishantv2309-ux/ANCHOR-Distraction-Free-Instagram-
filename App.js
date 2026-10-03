@@ -14,19 +14,19 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { WebView } from 'react-native-webview';
 import Svg, { Path, Circle } from 'react-native-svg';
 
-// Injection script that respects system light/dark mode and restores native Instagram aesthetics
+// Minimal, non-destructive script that lets Instagram render its 100% native UI
 const getInjectedJS = (isDark) => `
   (function() {
     const isDarkMode = ${isDark};
     const themeClass = isDarkMode ? 'dark' : 'light';
 
-    // 1. Sync theme cookies
+    // 1. Sync native theme cookies so Instagram server & client render the original theme
     try {
       document.cookie = "theme=" + themeClass + "; path=/; max-age=31536000; domain=.instagram.com";
       document.cookie = "theme=" + themeClass + "; path=/; max-age=31536000";
     } catch(e) {}
 
-    // 2. Viewport meta tag
+    // 2. Set viewport for mobile responsiveness
     let meta = document.querySelector('meta[name="viewport"]');
     if (!meta) {
       meta = document.createElement('meta');
@@ -38,19 +38,13 @@ const getInjectedJS = (isDark) => `
     }
 
     const applyNativeEnhancements = () => {
-      // Update root color scheme attributes naturally
       if (document.documentElement) {
         document.documentElement.classList.remove('light', 'dark');
         document.documentElement.classList.add(themeClass);
-        document.documentElement.style.setProperty('color-scheme', themeClass, 'important');
-        document.documentElement.style.setProperty('background-color', isDarkMode ? '#000000' : '#FFFFFF', 'important');
-      }
-      if (document.body) {
-        document.body.style.setProperty('background-color', isDarkMode ? '#000000' : '#FFFFFF', 'important');
-        document.body.style.setProperty('color-scheme', themeClass, 'important');
+        document.documentElement.style.setProperty('color-scheme', themeClass);
       }
 
-      const styleId = 'anchor-native-ui-fix';
+      const styleId = 'anchor-native-shield';
       let style = document.getElementById(styleId);
       if (!style) {
         style = document.createElement('style');
@@ -59,49 +53,20 @@ const getInjectedJS = (isDark) => `
       }
 
       style.innerHTML = \`
-        /* REMOVE ALL CUSTOM BOX OUTLINES AND FORCED BORDERS */
+        /* Remove artificial outline rings */
         * {
-          box-shadow: none !important;
           outline: none !important;
+          -webkit-tap-highlight-color: transparent !important;
         }
 
-        /* Enforce root background colors based on current system theme */
-        html, body, #react-root {
-          background-color: \${isDarkMode ? '#000000' : '#FFFFFF'} !important;
-        }
-
-        /* Instagram Native Theme Variables */
-        :root, html, body {
-          color-scheme: \${themeClass} !important;
-          --primary-background: \${isDarkMode ? '#000000' : '#FFFFFF'} !important;
-          --secondary-background: \${isDarkMode ? '#121212' : '#FAFAFA'} !important;
-          --ig-primary-background: \${isDarkMode ? '#000000' : '#FFFFFF'} !important;
-          --ig-secondary-background: \${isDarkMode ? '#121212' : '#FAFAFA'} !important;
-          --ig-stroke: \${isDarkMode ? '#262626' : '#DBDBDB'} !important;
-          --card-background: \${isDarkMode ? '#000000' : '#FFFFFF'} !important;
-        }
-
-        /* DM Chat List Fixes & Container Theming */
-        div[role="listbox"], div[role="list"], div[aria-label*="Direct" i] {
-          background-color: \${isDarkMode ? '#000000' : '#FFFFFF'} !important;
-        }
-
-        /* Text Input & Search Bar Clean Formatting */
-        input, textarea, select {
-          background-color: \${isDarkMode ? '#121212' : '#FAFAFA'} !important;
-          border: 1px solid \${isDarkMode ? '#262626' : '#DBDBDB'} !important;
-          color: \${isDarkMode ? '#FFFFFF' : '#000000'} !important;
-          border-radius: 8px !important;
-        }
-
-        /* Bottom safe scrolling clearance strictly on root main container */
+        /* Safe bottom clearance strictly on root main scroll container - Never on sections */
         main[role="main"] {
-          padding-bottom: 95px !important;
+          padding-bottom: 85px !important;
           margin-bottom: 0 !important;
           box-sizing: border-box !important;
         }
 
-        /* Eliminate clutter: Reels tabs and Explore tabs */
+        /* 1. Distraction-Free: Hide Reels tabs and Explore tabs */
         a[href*="/reels/"], 
         a[href^="/reels/"], 
         a[aria-label*="Reels" i], 
@@ -112,8 +77,7 @@ const getInjectedJS = (isDark) => `
         a[href^="/explore/"], 
         a[aria-label*="Explore" i], 
         svg[aria-label*="Explore" i],
-        div[data-testid="explore-tab"],
-        a[href="/"] svg[aria-label*="Home" i] { 
+        div[data-testid="explore-tab"] { 
           display: none !important; 
           visibility: hidden !important;
           pointer-events: none !important;
@@ -121,23 +85,20 @@ const getInjectedJS = (isDark) => `
           overflow: hidden !important;
         }
 
-        /* Completely Eradicate Instagram Mobile Web Bottom Bar */
+        /* 2. Position web bottom nav offscreen so its profile anchor remains clickable */
         footer[role="contentinfo"],
-        footer,
         div[data-testid="bottom-nav"],
         div[data-testid="mobile-nav-bar"],
         div[data-testid="tab-bar"],
         div[data-testid="bottom_bar"] {
-          display: none !important; 
-          visibility: hidden !important;
+          position: fixed !important;
+          bottom: -9999px !important;
+          opacity: 0 !important;
           pointer-events: none !important;
           height: 0 !important;
-          max-height: 0 !important;
-          overflow: hidden !important;
-          opacity: 0 !important;
         }
 
-        /* Hide Threads and Suggested Clutter without breaking Header flexbox */
+        /* 3. Hide Threads and Suggested Clutter */
         a[href*="threads.net"],
         a[aria-label*="Threads" i],
         svg[aria-label*="Threads" i],
@@ -150,23 +111,21 @@ const getInjectedJS = (isDark) => `
           display: none !important;
         }
 
-        /* Hide Saved / Bookmark Tab on Profile */
+        /* 4. Hide Saved tab from profile */
         a[href*="/saved/"],
         div[role="tab"]:has(svg[aria-label*="Saved" i]),
         svg[aria-label*="Saved" i] {
           display: none !important;
         }
 
-        /* Cleanly hide web-only app installation banners */
-        div[style*="position: fixed"][style*="bottom: 0"],
-        div[style*="bottom"][aria-label*="app" i],
+        /* 5. Suppress "Use the app" sticky bottom banners */
         a[href*="instagram://"],
         a[href*="itunes.apple.com"],
         a[href*="play.google.com"],
-        [aria-label*="Use the app" i],
-        [aria-label*="Get the app" i],
-        [aria-label*="Open in app" i],
         .smartbanner,
+        [aria-label*="Get the app" i],
+        [aria-label*="Use the app" i],
+        [aria-label*="Open in app" i],
         div[data-testid*="app-upsell"],
         div[data-testid*="open-in-app"],
         div[data-testid*="smart-banner"] {
@@ -175,7 +134,6 @@ const getInjectedJS = (isDark) => `
           visibility: hidden !important;
           pointer-events: none !important;
           height: 0 !important;
-          max-height: 0 !important;
         }
       \`;
     };
@@ -184,7 +142,7 @@ const getInjectedJS = (isDark) => `
     const observer = new MutationObserver(applyNativeEnhancements);
     observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
 
-    // Active DOM cleaner for dynamic app banners
+    // Active cleaner for dynamic "Use the app" banner prompts
     const purgeBanners = () => {
       const elements = document.querySelectorAll('div, a, span, button');
       elements.forEach(el => {
@@ -199,7 +157,6 @@ const getInjectedJS = (isDark) => `
               current.style.setProperty('display', 'none', 'important');
               current.style.setProperty('visibility', 'hidden', 'important');
               current.style.setProperty('height', '0px', 'important');
-              current.style.setProperty('max-height', '0px', 'important');
               current.style.setProperty('opacity', '0', 'important');
               current.style.setProperty('pointer-events', 'none', 'important');
               return;
@@ -210,88 +167,95 @@ const getInjectedJS = (isDark) => `
       });
     };
     purgeBanners();
-    setInterval(purgeBanners, 1000);
+    setInterval(purgeBanners, 1200);
 
-    // Dynamic user extraction for Profile tab
+    // Bulletproof logged-in user extraction
     function detectUser() {
       if (window.__ANCHOR_USER__) return;
+      const ignored = ['explore', 'reels', 'direct', 'stories', 'accounts', 'messages', 'notifications', 'search', 'settings', 'p', 'reel'];
+
       try {
-        const userMeta = document.querySelector('meta[property="al:ios:url"]');
-        if (userMeta && userMeta.content) {
-          const u = userMeta.content.split('user?username=')[1];
-          if (u && !['explore', 'reels', 'direct', 'stories', 'accounts'].includes(u)) {
+        // 1. Viewer in Instagram runtime
+        if (window._sharedData?.config?.viewer?.username) {
+          const u = window._sharedData.config.viewer.username;
+          if (u && !ignored.includes(u.toLowerCase())) {
             window.__ANCHOR_USER__ = u;
-            if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOGGED_IN_USER', username: u }));
-            }
+            if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOGGED_IN_USER', username: u }));
             return;
           }
         }
 
-        const link = document.querySelector('a[href^="/"][role="link"]:has(img[alt*="profile picture" i])') ||
-                     document.querySelector('a[href*="/"][role="link"]:has(img)') ||
-                     document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])');
-        if (link) {
-          const u2 = (link.getAttribute('href') || '').replace(/\\//g, '').split('?')[0];
-          if (u2 && !['explore', 'reels', 'direct', 'stories', 'accounts'].includes(u2)) {
-            window.__ANCHOR_USER__ = u2;
-            if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOGGED_IN_USER', username: u2 }));
+        // 2. Bottom nav profile anchor
+        const anchors = document.querySelectorAll('a[href^="/"]');
+        for (let i = 0; i < anchors.length; i++) {
+          const a = anchors[i];
+          if (a.querySelector('img[alt*="profile picture" i]')) {
+            const h = (a.getAttribute('href') || '').replace(/^\\/+|\\/+$/g, '');
+            if (h && !h.includes('/') && !ignored.includes(h.toLowerCase())) {
+              window.__ANCHOR_USER__ = h;
+              if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOGGED_IN_USER', username: h }));
+              return;
             }
+          }
+        }
+
+        // 3. Avatar alt text
+        const avatars = document.querySelectorAll('img[alt*="profile picture" i]');
+        for (let i = 0; i < avatars.length; i++) {
+          const match = (avatars[i].alt || '').match(/^([^'’]+)['’]s profile picture/i);
+          if (match && match[1] && !ignored.includes(match[1].toLowerCase())) {
+            window.__ANCHOR_USER__ = match[1];
+            if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOGGED_IN_USER', username: match[1] }));
             return;
           }
         }
 
+        // 4. Header title in Direct Inbox
         const headerEls = document.querySelectorAll('header span, header h1, header button span, header div[role="button"]');
         for (let i = 0; i < headerEls.length; i++) {
           const raw = (headerEls[i].textContent || '').trim().split('\\n')[0].replace(/[∨⌄▼v\\s]/g, '');
-          if (/^[a-zA-Z0-9._]{3,30}$/.test(raw) && !['explore', 'reels', 'direct', 'stories', 'accounts', 'messages', 'notifications', 'search', 'settings'].includes(raw.toLowerCase())) {
+          if (/^[a-zA-Z0-9._]{3,30}$/.test(raw) && !ignored.includes(raw.toLowerCase())) {
             window.__ANCHOR_USER__ = raw;
-            if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOGGED_IN_USER', username: raw }));
-            }
+            if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOGGED_IN_USER', username: raw }));
             return;
           }
         }
       } catch(e) {}
     }
+
     detectUser();
     setInterval(detectUser, 1500);
 
-    // Reliable in-page router
+    // Reliable native router
     window.__anchorRoute = function(destination) {
       if (destination === 'activity') {
         window.location.href = 'https://www.instagram.com/accounts/activity/';
       } else if (destination === 'messages') {
         window.location.href = 'https://www.instagram.com/direct/inbox/';
       } else if (destination === 'profile') {
-        let handle = window.__ANCHOR_USER__ || null;
-        if (!handle) {
-          try {
-            const userMeta = document.querySelector('meta[property="al:ios:url"]');
-            if (userMeta && userMeta.content) {
-              handle = userMeta.content.split('user?username=')[1];
-            }
-          } catch (e) {}
-        }
-        if (!handle) {
-          const profileLink = document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])') ||
-                              document.querySelector('a[href*="/"][role="link"]:has(img)');
-          if (profileLink && profileLink.getAttribute('href')) {
-            const h = profileLink.getAttribute('href').replace(/\\//g, '').split('?')[0];
-            if (h && !['explore', 'reels', 'direct', 'stories', 'accounts'].includes(h)) {
-              handle = h;
-            }
+        // Try native bottom bar click first (preserves Single Page App routing)
+        const profileBtn = document.querySelector('footer a[href^="/"]:has(img), div[data-testid*="nav"] a[href^="/"]:has(img), div[data-testid*="tab"] a[href^="/"]:has(img), div[role="tablist"] a[href^="/"]:has(img)');
+        if (profileBtn && profileBtn.getAttribute('href')) {
+          const href = profileBtn.getAttribute('href').replace(/^\\/+|\\/+$/g, '');
+          if (href && !['explore', 'reels', 'direct'].includes(href)) {
+            profileBtn.click();
+            return;
           }
         }
-        if (handle && !handle.includes('accounts') && !handle.includes('explore')) {
+
+        let handle = window.__ANCHOR_USER__ || null;
+        if (!handle) {
+          detectUser();
+          handle = window.__ANCHOR_USER__ || null;
+        }
+
+        if (handle) {
           window.location.href = 'https://www.instagram.com/' + handle + '/';
         } else {
-          const profileBtn = document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])') ||
-                             document.querySelector('a[href*="/"][role="link"]:has(img)') ||
-                             document.querySelector('a[aria-label*="Profile" i]');
-          if (profileBtn) {
-            profileBtn.click();
+          // Final fallback to own profile
+          const anyAvatarLink = document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])');
+          if (anyAvatarLink) {
+            anyAvatarLink.click();
           } else {
             window.location.href = 'https://www.instagram.com/';
           }
@@ -410,32 +374,14 @@ function MainApp() {
       if (loggedInUser) {
         webViewRef.current.injectJavaScript(`window.location.href = 'https://www.instagram.com/${loggedInUser}/'; true;`);
       } else {
-        const resolveProfileJS = `
-          (function() {
-            if (typeof window.__anchorRoute === 'function') {
-              window.__anchorRoute('profile');
-              return;
-            }
-            let handle = null;
-            try {
-              const profileLink = document.querySelector('a[href*="/"][role="link"]:has(img)');
-              if (profileLink) {
-                const href = profileLink.getAttribute('href');
-                if (href && !href.includes('accounts') && !href.includes('explore') && !href.includes('direct')) {
-                  handle = href.replace(/\\//g, '').split('?')[0];
-                }
-              }
-            } catch(e) {}
-
-            if (handle) {
-              window.location.href = 'https://www.instagram.com/' + handle + '/';
-            } else {
-              window.location.href = 'https://www.instagram.com/';
-            }
-          })();
+        webViewRef.current.injectJavaScript(`
+          if (typeof window.__anchorRoute === 'function') {
+            window.__anchorRoute('profile');
+          } else {
+            window.location.href = 'https://www.instagram.com/';
+          }
           true;
-        `;
-        webViewRef.current.injectJavaScript(resolveProfileJS);
+        `);
       }
     } else if (tab === 'settings') {
       // Directs to Instagram's real Settings page (NOT Edit Profile)
@@ -474,7 +420,7 @@ function MainApp() {
         </View>
       </View>
 
-      {/* Clean WebView */}
+      {/* Native Instagram WebView */}
       <WebView
         ref={webViewRef}
         source={{ uri: 'https://www.instagram.com/direct/inbox/' }}
@@ -515,7 +461,7 @@ function MainApp() {
           style={[
             styles.navBar,
             {
-              backgroundColor: isDark ? 'rgba(24, 24, 27, 0.88)' : 'rgba(255, 255, 255, 0.90)',
+              backgroundColor: isDark ? 'rgba(24, 24, 27, 0.92)' : 'rgba(255, 255, 255, 0.94)',
               borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
             },
           ]}

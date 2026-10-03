@@ -1,27 +1,32 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, StatusBar, View, Text, TouchableOpacity, Pressable, BackHandler, Platform, ActivityIndicator, Animated } from 'react-native';
+import {
+  StyleSheet,
+  StatusBar,
+  View,
+  Text,
+  TouchableOpacity,
+  BackHandler,
+  Platform,
+  ActivityIndicator,
+  useColorScheme,
+} from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import Svg, { Path, Circle } from 'react-native-svg';
 
-// Injected CSS and lightweight DOM helpers
-const INJECTED_CSS_AND_PRELOAD = `
+// Injection script that respects system light/dark mode and restores native Instagram aesthetics
+const getInjectedJS = (isDark) => `
   (function() {
-    if (document.documentElement) {
-      document.documentElement.classList.add('dark');
-      document.documentElement.style.setProperty('background-color', '#000000', 'important');
-      document.documentElement.style.setProperty('color-scheme', 'dark', 'important');
-    }
-    if (document.body) {
-      document.body.style.setProperty('background-color', '#000000', 'important');
-      document.body.style.setProperty('color-scheme', 'dark', 'important');
-    }
+    const isDarkMode = ${isDark};
+    const themeClass = isDarkMode ? 'dark' : 'light';
 
+    // 1. Sync theme cookies
     try {
-      document.cookie = "theme=dark; path=/; max-age=31536000; domain=.instagram.com";
-      document.cookie = "theme=dark; path=/; max-age=31536000";
+      document.cookie = "theme=" + themeClass + "; path=/; max-age=31536000; domain=.instagram.com";
+      document.cookie = "theme=" + themeClass + "; path=/; max-age=31536000";
     } catch(e) {}
 
+    // 2. Viewport meta tag
     let meta = document.querySelector('meta[name="viewport"]');
     if (!meta) {
       meta = document.createElement('meta');
@@ -32,11 +37,71 @@ const INJECTED_CSS_AND_PRELOAD = `
       meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
     }
 
-    if (!document.getElementById('anchor-speed-styles')) {
-      const style = document.createElement('style');
-      style.id = 'anchor-speed-styles';
+    const applyNativeEnhancements = () => {
+      // Update root color scheme attributes naturally
+      if (document.documentElement) {
+        document.documentElement.classList.remove('light', 'dark');
+        document.documentElement.classList.add(themeClass);
+        document.documentElement.style.setProperty('color-scheme', themeClass, 'important');
+        document.documentElement.style.setProperty('background-color', isDarkMode ? '#000000' : '#FFFFFF', 'important');
+      }
+      if (document.body) {
+        document.body.style.setProperty('background-color', isDarkMode ? '#000000' : '#FFFFFF', 'important');
+        document.body.style.setProperty('color-scheme', themeClass, 'important');
+      }
+
+      const styleId = 'anchor-native-ui-fix';
+      let style = document.getElementById(styleId);
+      if (!style) {
+        style = document.createElement('style');
+        style.id = styleId;
+        (document.head || document.documentElement).appendChild(style);
+      }
+
       style.innerHTML = \`
-        /* 1. Eliminate clutter: Reels tabs and Explore tabs */
+        /* REMOVE ALL CUSTOM BOX OUTLINES AND FORCED BORDERS */
+        * {
+          box-shadow: none !important;
+          outline: none !important;
+        }
+
+        /* Enforce root background colors based on current system theme */
+        html, body, #react-root {
+          background-color: \${isDarkMode ? '#000000' : '#FFFFFF'} !important;
+        }
+
+        /* Instagram Native Theme Variables */
+        :root, html, body {
+          color-scheme: \${themeClass} !important;
+          --primary-background: \${isDarkMode ? '#000000' : '#FFFFFF'} !important;
+          --secondary-background: \${isDarkMode ? '#121212' : '#FAFAFA'} !important;
+          --ig-primary-background: \${isDarkMode ? '#000000' : '#FFFFFF'} !important;
+          --ig-secondary-background: \${isDarkMode ? '#121212' : '#FAFAFA'} !important;
+          --ig-stroke: \${isDarkMode ? '#262626' : '#DBDBDB'} !important;
+          --card-background: \${isDarkMode ? '#000000' : '#FFFFFF'} !important;
+        }
+
+        /* DM Chat List Fixes & Container Theming */
+        div[role="listbox"], div[role="list"], div[aria-label*="Direct" i] {
+          background-color: \${isDarkMode ? '#000000' : '#FFFFFF'} !important;
+        }
+
+        /* Text Input & Search Bar Clean Formatting */
+        input, textarea, select {
+          background-color: \${isDarkMode ? '#121212' : '#FAFAFA'} !important;
+          border: 1px solid \${isDarkMode ? '#262626' : '#DBDBDB'} !important;
+          color: \${isDarkMode ? '#FFFFFF' : '#000000'} !important;
+          border-radius: 8px !important;
+        }
+
+        /* Bottom safe scrolling clearance strictly on root main container */
+        main[role="main"] {
+          padding-bottom: 95px !important;
+          margin-bottom: 0 !important;
+          box-sizing: border-box !important;
+        }
+
+        /* Eliminate clutter: Reels tabs and Explore tabs */
         a[href*="/reels/"], 
         a[href^="/reels/"], 
         a[aria-label*="Reels" i], 
@@ -56,7 +121,7 @@ const INJECTED_CSS_AND_PRELOAD = `
           overflow: hidden !important;
         }
 
-        /* 2. Completely Eradicate Instagram Mobile Web Bottom Bar */
+        /* Completely Eradicate Instagram Mobile Web Bottom Bar */
         footer[role="contentinfo"],
         footer,
         div[data-testid="bottom-nav"],
@@ -72,7 +137,7 @@ const INJECTED_CSS_AND_PRELOAD = `
           opacity: 0 !important;
         }
 
-        /* 3. Hide Threads and Suggested Clutter without breaking Header flexbox */
+        /* Hide Threads and Suggested Clutter without breaking Header flexbox */
         a[href*="threads.net"],
         a[aria-label*="Threads" i],
         svg[aria-label*="Threads" i],
@@ -85,22 +150,23 @@ const INJECTED_CSS_AND_PRELOAD = `
           display: none !important;
         }
 
-        /* 4. Hide Saved / Bookmark Tab on Profile */
+        /* Hide Saved / Bookmark Tab on Profile */
         a[href*="/saved/"],
         div[role="tab"]:has(svg[aria-label*="Saved" i]),
         svg[aria-label*="Saved" i] {
           display: none !important;
         }
 
-        /* 5. Permanently hide Instagram "Use the app" sticky bottom banners */
+        /* Cleanly hide web-only app installation banners */
+        div[style*="position: fixed"][style*="bottom: 0"],
+        div[style*="bottom"][aria-label*="app" i],
         a[href*="instagram://"],
         a[href*="itunes.apple.com"],
         a[href*="play.google.com"],
-        .smartbanner,
-        [aria-label*="Get the app" i],
         [aria-label*="Use the app" i],
+        [aria-label*="Get the app" i],
         [aria-label*="Open in app" i],
-        div[style*="position: fixed"][style*="bottom: 0"],
+        .smartbanner,
         div[data-testid*="app-upsell"],
         div[data-testid*="open-in-app"],
         div[data-testid*="smart-banner"] {
@@ -111,180 +177,42 @@ const INJECTED_CSS_AND_PRELOAD = `
           height: 0 !important;
           max-height: 0 !important;
         }
-
-        /* 6. Controlled safe bottom clearance ONLY on root scrollable main container */
-        main[role="main"] {
-          padding-bottom: 95px !important;
-          margin-bottom: 0 !important;
-          box-sizing: border-box !important;
-        }
-
-        /* 7. Strict Pure Black Background on root containers */
-        html, body, #react-root {
-          background-color: #000000 !important;
-        }
-
-        /* 8. Enable Instagram Native Dark Palette Variables */
-        :root, html, body {
-          color-scheme: dark !important;
-          --primary-background: #000000 !important;
-          --secondary-background: #121212 !important;
-          --ig-primary-background: #000000 !important;
-          --ig-secondary-background: #121212 !important;
-          --ig-stroke: #262626 !important;
-          --card-background: #000000 !important;
-        }
-      \`;
-      (document.head || document.documentElement).appendChild(style);
-    }
-  })();
-  true;
-`;
-
-const INJECTED_JAVASCRIPT = `
-  (function() {
-    // 1. Force strict dark mode across all views including DMs (/direct/inbox/)
-    const applyGlobalDarkTheme = () => {
-      document.documentElement.classList.add('dark');
-      document.documentElement.style.setProperty('background-color', '#000000', 'important');
-      document.documentElement.style.setProperty('color-scheme', 'dark', 'important');
-      if (document.body) {
-        document.body.style.setProperty('background-color', '#000000', 'important');
-      }
-
-      const styleId = 'anchor-clean-ui-v2';
-      let style = document.getElementById(styleId);
-      if (!style) {
-        style = document.createElement('style');
-        style.id = styleId;
-        (document.head || document.documentElement).appendChild(style);
-      }
-      style.innerHTML = \`
-        /* Pure dark root containers */
-        html, body, #react-root, main[role="main"] {
-          background-color: #000000 !important;
-        }
-
-        /* Direct messages and list dark styling */
-        div[role="listbox"], div[role="list"], div[aria-label*="Direct" i] {
-          background-color: #000000 !important;
-        }
-
-        /* Clean input box styling without bright white wireframes */
-        input, textarea, select {
-          background-color: #121212 !important;
-          border: 1px solid #262626 !important;
-          color: #FFFFFF !important;
-          border-radius: 8px !important;
-        }
-
-        /* HIDE SAVED / BOOKMARK TAB ON PROFILE PAGE */
-        a[href*="/saved/"],
-        div[role="tab"]:has(svg[aria-label="Saved"]),
-        div[role="tab"]:has(svg[aria-label*="Saved" i]),
-        svg[aria-label="Saved"],
-        svg[aria-label*="Saved" i] {
-          display: none !important;
-        }
-
-        /* Hide "Use the App" Banners */
-        div[style*="position: fixed"][style*="bottom: 0"],
-        div[style*="bottom"][aria-label*="app" i],
-        a[href*="instagram://"],
-        [aria-label*="Use the app" i],
-        [aria-label*="Get the app" i],
-        .smartbanner {
-          display: none !important;
-          opacity: 0 !important;
-          visibility: hidden !important;
-          pointer-events: none !important;
-          height: 0 !important;
-        }
-
-        /* Safe clearance ONLY on root main container - Never on sections */
-        main[role="main"] {
-          padding-bottom: 95px !important;
-          margin-bottom: 0 !important;
-          box-sizing: border-box !important;
-        }
-
-        /* Instagram theme variables - Pure dark theme with authentic contrast */
-        :root, html, body {
-          --primary-background: #000000 !important;
-          --secondary-background: #121212 !important;
-          --ig-primary-background: #000000 !important;
-          --ig-secondary-background: #121212 !important;
-          --ig-stroke: #262626 !important;
-          --card-background: #000000 !important;
-          color-scheme: dark !important;
-        }
       \`;
     };
 
-      // Safe non-destructive hiding of banner elements by text content
+    applyNativeEnhancements();
+    const observer = new MutationObserver(applyNativeEnhancements);
+    observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+
+    // Active DOM cleaner for dynamic app banners
+    const purgeBanners = () => {
       const elements = document.querySelectorAll('div, a, span, button');
       elements.forEach(el => {
-        const text = el.innerText || el.textContent || '';
-        if (text.includes('Use the app') || text.includes('Open in app') || text.includes('Get the app')) {
+        const text = (el.innerText || el.textContent || '').toLowerCase();
+        if (text.includes('use the app') || text.includes('open in app') || text.includes('get the app')) {
           let current = el;
           for (let i = 0; i < 5; i++) {
             if (!current || !current.parentElement) break;
             if (current.tagName === 'BODY' || current.tagName === 'HTML' || current.tagName === 'MAIN') break;
             const style = window.getComputedStyle(current);
-            if (style.position === 'fixed' || style.position === 'sticky' || current.getAttribute('role') === 'dialog') {
+            if (style.position === 'fixed' || style.position === 'sticky' || current.getAttribute('role') === 'dialog' || style.bottom === '0px') {
               current.style.setProperty('display', 'none', 'important');
               current.style.setProperty('visibility', 'hidden', 'important');
               current.style.setProperty('height', '0px', 'important');
               current.style.setProperty('max-height', '0px', 'important');
               current.style.setProperty('opacity', '0', 'important');
               current.style.setProperty('pointer-events', 'none', 'important');
-              current.style.setProperty('z-index', '-9999', 'important');
               return;
             }
             current = current.parentElement;
           }
         }
       });
-
-      // Target original bottom navigation bar if present
-      var bottomCandidates = document.querySelectorAll('nav, footer, div');
-      for (var i = 0; i < bottomCandidates.length; i++) {
-        var c = bottomCandidates[i];
-        if (c.closest('header') || c.tagName === 'MAIN' || c.getAttribute('role') === 'main') continue;
-        var h = c.offsetHeight;
-        if (h >= 35 && h <= 65) {
-          var rect = c.getBoundingClientRect();
-          if (rect.bottom >= (window.innerHeight - 15) && rect.top > 100) {
-            if (c.querySelector('a[href="/"], svg[aria-label*="Home" i], svg[aria-label*="Search" i], a[href*="/explore/"]')) {
-              c.style.setProperty('display', 'none', 'important');
-              c.style.setProperty('visibility', 'hidden', 'important');
-              c.style.setProperty('height', '0px', 'important');
-              c.style.setProperty('pointer-events', 'none', 'important');
-            }
-          }
-        }
-      }
-
-      // Hide Threads and Camera/Story from header
-      document.querySelectorAll('a[href*="threads.net"], svg[aria-label*="Threads" i], header a[href*="/stories/create"], header svg[aria-label*="Camera" i], header svg[aria-label*="Story" i]').forEach(function(el) {
-        var t = el.closest('a, button, div[role="button"]') || el;
-        t.style.setProperty('display', 'none', 'important');
-      });
     };
+    purgeBanners();
+    setInterval(purgeBanners, 1000);
 
-    // Run immediately and every 300ms during page load
-    applyGlobalDarkTheme();
-    const interval = setInterval(applyGlobalDarkTheme, 300);
-    setTimeout(() => clearInterval(interval), 10000);
-
-    // Continuous DOM Observer
-    const observer = new MutationObserver(applyGlobalDarkTheme);
-    observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
-
-    // Expose for native callbacks
-    window.__anchorClean = applyGlobalDarkTheme;
-
-    // 2. Detect logged-in username dynamically from React session / DOM
+    // Dynamic user extraction for Profile tab
     function detectUser() {
       if (window.__ANCHOR_USER__) return;
       try {
@@ -300,11 +228,11 @@ const INJECTED_JAVASCRIPT = `
           }
         }
 
-        var link = document.querySelector('a[href^="/"][role="link"]:has(img[alt*="profile picture" i])') ||
-                   document.querySelector('a[href*="/"][role="link"]:has(img)') ||
-                   document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])');
+        const link = document.querySelector('a[href^="/"][role="link"]:has(img[alt*="profile picture" i])') ||
+                     document.querySelector('a[href*="/"][role="link"]:has(img)') ||
+                     document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])');
         if (link) {
-          var u2 = (link.getAttribute('href') || '').replace(/\\//g, '').split('?')[0];
+          const u2 = (link.getAttribute('href') || '').replace(/\\//g, '').split('?')[0];
           if (u2 && !['explore', 'reels', 'direct', 'stories', 'accounts'].includes(u2)) {
             window.__ANCHOR_USER__ = u2;
             if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
@@ -314,7 +242,6 @@ const INJECTED_JAVASCRIPT = `
           }
         }
 
-        // 3. Check direct header text or active account switcher
         const headerEls = document.querySelectorAll('header span, header h1, header button span, header div[role="button"]');
         for (let i = 0; i < headerEls.length; i++) {
           const raw = (headerEls[i].textContent || '').trim().split('\\n')[0].replace(/[∨⌄▼v\\s]/g, '');
@@ -328,11 +255,10 @@ const INJECTED_JAVASCRIPT = `
         }
       } catch(e) {}
     }
-
     detectUser();
     setInterval(detectUser, 1500);
 
-    // 3. Fast direct tab router with bulletproof Profile fallback (never 404s)
+    // Reliable in-page router
     window.__anchorRoute = function(destination) {
       if (destination === 'activity') {
         window.location.href = 'https://www.instagram.com/accounts/activity/';
@@ -340,13 +266,14 @@ const INJECTED_JAVASCRIPT = `
         window.location.href = 'https://www.instagram.com/direct/inbox/';
       } else if (destination === 'profile') {
         let handle = window.__ANCHOR_USER__ || null;
-        try {
-          const userMeta = document.querySelector('meta[property="al:ios:url"]');
-          if (userMeta && userMeta.content) {
-            handle = userMeta.content.split('user?username=')[1];
-          }
-        } catch (e) {}
-
+        if (!handle) {
+          try {
+            const userMeta = document.querySelector('meta[property="al:ios:url"]');
+            if (userMeta && userMeta.content) {
+              handle = userMeta.content.split('user?username=')[1];
+            }
+          } catch (e) {}
+        }
         if (!handle) {
           const profileLink = document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])') ||
                               document.querySelector('a[href*="/"][role="link"]:has(img)');
@@ -357,11 +284,9 @@ const INJECTED_JAVASCRIPT = `
             }
           }
         }
-
         if (handle && !handle.includes('accounts') && !handle.includes('explore')) {
           window.location.href = 'https://www.instagram.com/' + handle + '/';
         } else {
-          // Native DOM click fallback prevents "Page isn't available" errors
           const profileBtn = document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])') ||
                              document.querySelector('a[href*="/"][role="link"]:has(img)') ||
                              document.querySelector('a[aria-label*="Profile" i]');
@@ -372,65 +297,60 @@ const INJECTED_JAVASCRIPT = `
           }
         }
       } else if (destination === 'settings') {
-        var gear = document.querySelector('svg[aria-label*="Options" i], svg[aria-label*="Settings" i], a[href*="/accounts/settings/"]');
-        var gearBtn = gear ? gear.closest('a, button, div[role="button"]') : null;
-        if (gearBtn) {
-          gearBtn.click();
-        } else {
-          window.location.href = 'https://www.instagram.com/accounts/settings/';
-        }
+        window.location.href = 'https://www.instagram.com/settings/';
       }
     };
   })();
   true;
 `;
 
-// Clean SVG Icons with Active / Inactive states
-const ActivityIcon = ({ active }) => (
-  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-    {active ? (
-      <Path
-        d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
-        fill="#ffffff"
-      />
-    ) : (
-      <Path
-        d="M16.792 3.904A4.989 4.989 0 0 1 21.5 9.122c0 3.072-2.652 4.959-5.197 7.222-2.512 2.243-3.865 3.469-4.303 3.752-.477-.309-2.143-1.823-4.303-3.752C5.141 14.072 2.5 12.167 2.5 9.122a4.989 4.989 0 0 1 4.708-5.218 4.21 4.21 0 0 1 3.675 1.941c.84 1.175.98 1.763 1.12 1.763s.278-.588 1.11-1.766a4.17 4.17 0 0 1 3.679-1.938m0-2a6.04 6.04 0 0 0-4.797 2.127 6.052 6.052 0 0 0-4.787-2.127A6.985 6.985 0 0 0 .5 9.122c0 3.61 2.55 5.827 5.015 7.97.283.246.569.494.853.747l1.027.918a44.998 44.998 0 0 0 3.518 3.018 2 2 0 0 0 2.174 0 45.263 45.263 0 0 0 3.626-3.115l.922-.824c.293-.26.59-.519.885-.774 2.334-2.025 4.98-4.32 4.98-7.94a6.985 6.985 0 0 0-6.708-7.218Z"
-        fill="#8e8e93"
-      />
-    )}
-  </Svg>
-);
-
-const MessagesIcon = ({ active }) => (
-  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-    {active ? (
-      <Path
-        d="M12 2C6.477 2 2 6.145 2 11.258c0 2.914 1.455 5.518 3.734 7.207V22l3.41-1.872c.915.253 1.884.39 2.856.39 5.523 0 10-4.145 10-9.258C22 6.145 17.523 2 12 2zm1.066 12.443l-2.583-2.756-5.044 2.756 5.547-5.889 2.65 2.756 4.977-2.756-5.547 5.889z"
-        fill="#ffffff"
-      />
-    ) : (
-      <Path
-        d="M12 2.5C6.753 2.5 2.5 6.438 2.5 11.258c0 2.722 1.348 5.167 3.479 6.764l-.538 3.023a.75.75 0 001.077.787l3.665-1.782c.594.137 1.205.208 1.817.208 5.247 0 9.5-3.938 9.5-8.758C21.5 6.438 17.247 2.5 12 2.5zm0 1.5c4.418 0 8 3.243 8 7.258 0 4.015-3.582 7.258-8 7.258-.553 0-1.107-.06-1.642-.18l-.348-.078-2.582 1.255.378-2.126-.183-.243C5.97 18.064 4.5 15.918 4.5 11.258c0-4.015 3.582-7.258 8-7.258zm1.066 10.943l-2.583-2.756-5.044 2.756 5.547-5.889 2.65 2.756 4.977-2.756-5.547 5.889z"
-        fill="#8e8e93"
-      />
-    )}
-  </Svg>
-);
-
-const ProfileIcon = ({ active }) => (
-  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-    <Circle cx="12" cy="12" r="9.5" stroke={active ? '#ffffff' : '#8e8e93'} strokeWidth={active ? 2 : 1.7} />
-    <Circle cx="12" cy="9.5" r="3" fill={active ? '#ffffff' : '#8e8e93'} />
-    <Path d="M7 17.5c1-2.2 2.8-3.1 5-3.1s4 0.9 5 3.1" stroke={active ? '#ffffff' : '#8e8e93'} strokeWidth={1.7} strokeLinecap="round" fill="none" />
-  </Svg>
-);
-
-const SettingsIcon = ({ active }) => (
-  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+// Clean SVG Icons
+const ActivityIcon = ({ active, color }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill={active ? color : 'none'}>
     <Path
-      d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84a.484.484 0 00-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 00-.59.22L2.74 8.87a.49.49 0 00.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 00-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"
-      fill={active ? '#ffffff' : '#8e8e93'}
+      d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const MessagesIcon = ({ active, color }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill={active ? color : 'none'}>
+    <Path
+      d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const ProfileIcon = ({ active, color }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill={active ? color : 'none'}>
+    <Path
+      d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Circle cx={12} cy={7} r={4} stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const SettingsIcon = ({ active, color }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill={active ? color : 'none'}>
+    <Circle cx={12} cy={12} r={3} stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    <Path
+      d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
     />
   </Svg>
 );
@@ -442,60 +362,45 @@ const TABS = [
   { id: 'settings', label: 'Settings', Icon: SettingsIcon },
 ];
 
-const getTabIndex = (tabId) => {
-  switch (tabId) {
-    case 'activity': return 0;
-    case 'messages': return 1;
-    case 'profile': return 2;
-    case 'settings': return 3;
-    default: return 1;
-  }
-};
-
-function MainScreen() {
-  const insets = useSafeAreaInsets();
+function MainApp() {
   const webViewRef = useRef(null);
   const [activeTab, setActiveTab] = useState('messages');
-  const [innerWidth, setInnerWidth] = useState(0);
-  const slideAnim = useRef(new Animated.Value(1)).current;
-  const [loggedInUser, setLoggedInUser] = useState(null);
   const [canGoBack, setCanGoBack] = useState(false);
+  const [loggedInUser, setLoggedInUser] = useState(null);
+  const insets = useSafeAreaInsets();
+  const systemColorScheme = useColorScheme();
+  const isDark = systemColorScheme === 'dark';
 
-  // Instant Android Back Button Navigation
+  const themeBg = isDark ? '#000000' : '#FFFFFF';
+  const textColor = isDark ? '#FFFFFF' : '#000000';
+
   useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    const onBackPress = () => {
-      if (canGoBack && webViewRef.current) {
-        webViewRef.current.goBack();
-        return true;
-      }
-      return false;
-    };
-    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-    return () => sub.remove();
+    if (Platform.OS === 'android') {
+      const onBackPress = () => {
+        if (canGoBack && webViewRef.current) {
+          webViewRef.current.goBack();
+          return true;
+        }
+        return false;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => sub.remove();
+    }
   }, [canGoBack]);
 
   const onMessage = (event) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
-      if (data.type === 'LOGGED_IN_USER' && data.username) {
+      if (data && data.type === 'LOGGED_IN_USER' && data.username) {
         setLoggedInUser(data.username);
       }
-    } catch(e) {}
+    } catch (e) {}
   };
 
-  const handleTabPress = (tab) => {
-    if (tab === activeTab) return;
+  // Reliable navigation handler targeting true native web routes
+  const navigateTo = (tab) => {
     setActiveTab(tab);
-
-    const targetIndex = getTabIndex(tab);
-    Animated.spring(slideAnim, {
-      toValue: targetIndex,
-      stiffness: 280,
-      damping: 26,
-      mass: 0.8,
-      useNativeDriver: true,
-    }).start();
+    if (!webViewRef.current) return;
 
     if (tab === 'activity') {
       webViewRef.current.injectJavaScript("window.location.href = 'https://www.instagram.com/accounts/activity/'; true;");
@@ -513,29 +418,19 @@ function MainScreen() {
             }
             let handle = null;
             try {
-              const userMeta = document.querySelector('meta[property="al:ios:url"]');
-              if (userMeta && userMeta.content) {
-                handle = userMeta.content.split('user?username=')[1];
-              }
-            } catch(e) {}
-            if (!handle) {
-              const profileLink = document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])') ||
-                                  document.querySelector('a[href*="/"][role="link"]:has(img)');
-              if (profileLink && profileLink.getAttribute('href')) {
+              const profileLink = document.querySelector('a[href*="/"][role="link"]:has(img)');
+              if (profileLink) {
                 const href = profileLink.getAttribute('href');
-                if (href && !href.includes('accounts') && !href.includes('explore')) {
+                if (href && !href.includes('accounts') && !href.includes('explore') && !href.includes('direct')) {
                   handle = href.replace(/\\//g, '').split('?')[0];
                 }
               }
-            }
+            } catch(e) {}
+
             if (handle) {
               window.location.href = 'https://www.instagram.com/' + handle + '/';
             } else {
-              const profileBtn = document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])') ||
-                                 document.querySelector('a[href*="/"][role="link"]:has(img)') ||
-                                 document.querySelector('a[aria-label*="Profile" i]');
-              if (profileBtn) profileBtn.click();
-              else window.location.href = 'https://www.instagram.com/';
+              window.location.href = 'https://www.instagram.com/';
             }
           })();
           true;
@@ -543,55 +438,48 @@ function MainScreen() {
         webViewRef.current.injectJavaScript(resolveProfileJS);
       }
     } else if (tab === 'settings') {
-      webViewRef.current.injectJavaScript(`
-        (function() {
-          if (typeof window.__anchorRoute === 'function') {
-            window.__anchorRoute('settings');
-            return;
-          }
-          var gear = document.querySelector('svg[aria-label*="Options" i], svg[aria-label*="Settings" i], a[href*="/accounts/settings/"]');
-          var gearBtn = gear ? gear.closest('a, button, div[role="button"]') : null;
-          if (gearBtn) {
-            gearBtn.click();
-          } else {
-            window.location.href = 'https://www.instagram.com/accounts/settings/';
-          }
-        })();
-        true;
-      `);
+      // Directs to Instagram's real Settings page (NOT Edit Profile)
+      webViewRef.current.injectJavaScript("window.location.href = 'https://www.instagram.com/settings/'; true;");
     }
   };
 
   const topPadding = insets.top;
 
-  const tabWidth = innerWidth > 0 ? innerWidth / 4 : 0;
-  const pillWidth = tabWidth > 0 ? tabWidth - 4 : 0;
-
-  const translateX = slideAnim.interpolate({
-    inputRange: [0, 1, 2, 3],
-    outputRange: [0, tabWidth, tabWidth * 2, tabWidth * 3],
-  });
-
   return (
-    <View style={styles.container}>
-      <StatusBar backgroundColor="#080808" barStyle="light-content" translucent={true} />
+    <View style={[styles.container, { backgroundColor: themeBg }]}>
+      <StatusBar
+        backgroundColor={isDark ? '#000000' : '#FFFFFF'}
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        translucent={Platform.OS === 'android'}
+      />
 
       {/* Modern Slim Top Header */}
-      <View style={[styles.topHeader, { paddingTop: topPadding, height: 46 + topPadding }]}>
+      <View
+        style={[
+          styles.topHeader,
+          {
+            paddingTop: topPadding,
+            height: 44 + topPadding,
+            backgroundColor: themeBg,
+            borderBottomColor: isDark ? '#1C1C1E' : '#E5E5EA',
+          },
+        ]}
+      >
         <View style={styles.titleGroup}>
-          <Text style={styles.brandTitle}>⚓ Anchor</Text>
-          <View style={styles.focusedBadge}>
+          <Text style={[styles.brandTitle, { color: textColor }]}>⚓ Anchor</Text>
+          <View style={[styles.focusedBadge, { backgroundColor: isDark ? 'rgba(52, 199, 89, 0.15)' : 'rgba(52, 199, 89, 0.12)' }]}>
             <View style={styles.statusDot} />
             <Text style={styles.badgeText}>Focused</Text>
           </View>
         </View>
       </View>
 
-      {/* Clean, Non-crashing WebView */}
+      {/* Clean WebView */}
       <WebView
         ref={webViewRef}
         source={{ uri: 'https://www.instagram.com/direct/inbox/' }}
-        style={styles.webview}
+        style={[styles.webview, { backgroundColor: themeBg }]}
+        containerStyle={{ backgroundColor: themeBg }}
         domStorageEnabled={true}
         javaScriptEnabled={true}
         sharedCookiesEnabled={true}
@@ -605,70 +493,63 @@ function MainScreen() {
         mediaPlaybackRequiresUserAction={false}
         userAgent="Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
         allowsBackForwardNavigationGestures={true}
-        injectedJavaScriptBeforeContentLoaded={INJECTED_CSS_AND_PRELOAD}
-        injectedJavaScript={INJECTED_JAVASCRIPT}
+        injectedJavaScriptBeforeContentLoaded={getInjectedJS(isDark)}
+        injectedJavaScript={getInjectedJS(isDark)}
         onNavigationStateChange={(navState) => {
           if (navState.canGoBack !== canGoBack) {
             setCanGoBack(navState.canGoBack);
           }
         }}
-        onLoadEnd={() => {
-          if (webViewRef.current) {
-            webViewRef.current.injectJavaScript(`
-              if (typeof window.__anchorClean === 'function') {
-                window.__anchorClean();
-              }
-              true;
-            `);
-          }
-        }}
         onMessage={onMessage}
         startInLoadingState={true}
         renderLoading={() => (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#ffffff" />
+          <View style={[styles.loadingContainer, { backgroundColor: themeBg }]}>
+            <ActivityIndicator size="small" color={isDark ? '#FFFFFF' : '#000000'} />
           </View>
         )}
       />
 
-      {/* Ultra-Clean Floating Native Pill Navigation Bar with Smooth Sliding Glass Indicator */}
-      <View style={[styles.bottomBarContainer, { bottom: Math.max(insets.bottom, 16) + 8 }]}>
+      {/* Adaptive Floating Glass Navigation Bar */}
+      <View style={[styles.navBarWrapper, { bottom: Math.max(insets.bottom, 16) + 4 }]}>
         <View
-          style={styles.barInner}
-          onLayout={(e) => setInnerWidth(e.nativeEvent.layout.width)}
+          style={[
+            styles.navBar,
+            {
+              backgroundColor: isDark ? 'rgba(24, 24, 27, 0.88)' : 'rgba(255, 255, 255, 0.90)',
+              borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+            },
+          ]}
         >
-          {/* Continuous Gliding Frosted Glass Pill Indicator */}
-          {tabWidth > 0 && (
-            <Animated.View
-              style={[
-                styles.slidingIndicator,
-                {
-                  width: pillWidth,
-                  transform: [{ translateX }],
-                },
-              ]}
-            />
-          )}
-
           {TABS.map((tab) => {
             const isActive = activeTab === tab.id;
             const TabIcon = tab.Icon;
+            const itemColor = isActive
+              ? (isDark ? '#FFFFFF' : '#000000')
+              : (isDark ? '#8E8E93' : '#8E8E93');
+
             return (
-              <Pressable
+              <TouchableOpacity
                 key={tab.id}
-                style={styles.tabButton}
-                delayPressIn={0}
-                onPress={() => handleTabPress(tab.id)}
+                onPress={() => navigateTo(tab.id)}
+                activeOpacity={0.7}
+                style={[
+                  styles.navItem,
+                  isActive && (isDark ? styles.activeNavItemDark : styles.activeNavItemLight),
+                ]}
               >
-                {({ pressed }) => (
-                  <View style={[styles.tabContent, pressed && styles.tabContentPressed]}>
-                    <TabIcon active={isActive} />
-                    <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
-                      {tab.label}
-                    </Text>
-                  </View>
-                )}
-              </Pressable>
+                <TabIcon active={isActive} color={itemColor} />
+                <Text
+                  style={[
+                    styles.navText,
+                    {
+                      color: itemColor,
+                      fontWeight: isActive ? '700' : '500',
+                    },
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
             );
           })}
         </View>
@@ -700,7 +581,7 @@ class ErrorBoundary extends React.Component {
             style={{ backgroundColor: 'rgba(255, 255, 255, 0.15)', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 }}
             onPress={() => this.setState({ hasError: false, error: null })}
           >
-            <Text style={{ color: '#ffffff', fontWeight: 'bold' }}>Reload App</Text>
+            <Text style={{ color: '#ffffff', fontWeight: '600' }}>Retry</Text>
           </TouchableOpacity>
         </View>
       );
@@ -713,7 +594,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
-        <MainScreen />
+        <MainApp />
       </SafeAreaProvider>
     </ErrorBoundary>
   );
@@ -722,16 +603,13 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
   },
   topHeader: {
-    backgroundColor: '#0a0a0e',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    borderBottomWidth: 0.5,
     zIndex: 10,
   },
   titleGroup: {
@@ -740,7 +618,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   brandTitle: {
-    color: '#ffffff',
     fontSize: 16,
     fontWeight: '800',
     letterSpacing: -0.3,
@@ -748,104 +625,70 @@ const styles = StyleSheet.create({
   focusedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 185, 129, 0.12)',
-    borderColor: 'rgba(15, 185, 129, 0.35)',
-    borderWidth: 1,
-    borderRadius: 12,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
+    borderRadius: 12,
     gap: 5,
   },
   statusDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#0fb981',
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#34C759',
   },
   badgeText: {
-    color: '#0fb981',
     fontSize: 10,
     fontWeight: '700',
+    color: '#34C759',
     letterSpacing: 0.2,
   },
   webview: {
     flex: 1,
-    backgroundColor: '#000000',
   },
   loadingContainer: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 99,
   },
-  bottomBarContainer: {
+  navBarWrapper: {
     position: 'absolute',
-    left: 20,
-    right: 20,
-    height: 60,
-    backgroundColor: 'rgba(22, 22, 28, 0.88)', // Sleek dark glass surface
-    borderRadius: 9999, // Continuous capsule pill curve
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.20)', // Glowing translucent specular border
-    padding: 4, // Exactly uniform 4px on top, bottom, left, right!
-    overflow: 'visible',
-    elevation: 10,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 20,
+    left: 16,
+    right: 16,
+    alignItems: 'center',
+    zIndex: 100,
   },
-  barInner: {
-    flex: 1,
+  navBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: '100%',
-    position: 'relative',
-    overflow: 'visible',
-  },
-  slidingIndicator: {
-    position: 'absolute',
-    top: 2,
-    bottom: 2,
-    left: 2,
-    borderRadius: 9999, // Pill capsule matching the toast bar
-    backgroundColor: 'rgba(255, 255, 255, 0.16)', // Frosted glass indicator
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.35)', // Curvy glass glowing border
-    shadowColor: '#ffffff',
-    shadowOffset: { width: 0, height: 0 }, // Symmetrical glow, no downward displacement!
+    justifyContent: 'space-between',
+    borderRadius: 32,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    borderWidth: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 3,
-    zIndex: 1,
+    shadowRadius: 16,
+    elevation: 12,
   },
-  tabButton: {
-    flex: 1,
+  navItem: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: '100%',
-    zIndex: 2,
-    overflow: 'visible',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 22,
+    gap: 6,
   },
-  tabContent: {
-    alignItems: 'center',
-    justifyContent: 'center',
+  activeNavItemDark: {
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
   },
-  tabContentPressed: {
-    transform: [{ scale: 0.94 }],
-    opacity: 0.85,
+  activeNavItemLight: {
+    backgroundColor: 'rgba(0, 0, 0, 0.08)',
   },
-  tabLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#8e8e93',
-    marginTop: 2,
-    letterSpacing: -0.1,
-    includeFontPadding: false, // Prevents Android font vertical skew
-    textAlign: 'center',
-  },
-  tabLabelActive: {
-    color: '#ffffff',
-    fontWeight: '700',
+  navText: {
+    fontSize: 12,
+    letterSpacing: -0.2,
   },
 });

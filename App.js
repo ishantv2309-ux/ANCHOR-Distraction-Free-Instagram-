@@ -230,9 +230,11 @@ const INJECTED_JAVASCRIPT = `
           container.remove();
         });
 
-        // Remove Suggested/Discover people clutter
-        document.querySelectorAll('button:has(svg[aria-label*="Discover" i]), button:has(svg[aria-label*="Similar" i]), a[href*="/similar_accounts/"]').forEach(function(el) {
-          el.remove();
+        // Remove Suggested/Discover people clutter safely
+        document.querySelectorAll('button, a').forEach(function(btn) {
+          if (btn.querySelector('svg[aria-label*="Discover" i], svg[aria-label*="Similar" i]') || (btn.href && btn.href.indexOf('/similar_accounts/') !== -1)) {
+            btn.remove();
+          }
         });
       } catch(err) {}
     };
@@ -478,14 +480,8 @@ function MainScreen() {
         injectedJavaScriptBeforeContentLoaded={INJECTED_CSS_AND_PRELOAD}
         injectedJavaScript={INJECTED_JAVASCRIPT}
         onNavigationStateChange={(navState) => {
-          setCanGoBack(navState.canGoBack);
-          if (webViewRef.current) {
-            webViewRef.current.injectJavaScript(`
-              if (typeof window.__anchorClean === 'function') {
-                window.__anchorClean();
-              }
-              true;
-            `);
+          if (navState.canGoBack !== canGoBack) {
+            setCanGoBack(navState.canGoBack);
           }
         }}
         onLoadEnd={() => {

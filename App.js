@@ -41,9 +41,22 @@ const INJECTED_CSS_AND_PRELOAD = `
           overflow: hidden !important;
         }
 
-        /* 2. Eradicate Instagram Mobile Web Bottom Bar */
-        div[role="tablist"]:not(:has(svg[aria-label*="Posts" i])),
+        /* 2. Completely & Permanently Eradicate Instagram Mobile Web Bottom Bar */
+        nav:not(header nav),
+        nav[role="navigation"]:not(header *),
+        div[role="navigation"]:not(header *),
+        div[style*="position: fixed"]:has(a[href="/"]):not(header *),
+        div[style*="position: fixed"]:has(svg[aria-label*="Home" i]):not(header *),
+        div[style*="position: fixed"]:has(svg[aria-label*="Search" i]):not(header *),
+        div[style*="position: fixed"]:has(img[alt*="profile picture" i]):not(header *),
+        div[style*="bottom: 0px"]:not(body > div:first-child),
+        div[style*="bottom: 0"]:not(body > div:first-child),
+        div[style*="bottom:0"]:not(body > div:first-child),
+        body > div div:has(> a[href="/"]):has(> a[href*="/direct/"]),
+        body > div div:has(> a[href="/"]):has(> a[href*="/explore/"]),
+        div:has(> div > a[href="/"]):has(a[href*="/direct/"]),
         footer[role="contentinfo"],
+        footer,
         div[data-testid="bottom-nav"],
         div[data-testid="mobile-nav-bar"],
         div[data-testid="tab-bar"],
@@ -56,9 +69,80 @@ const INJECTED_CSS_AND_PRELOAD = `
           height: 0 !important;
           max-height: 0 !important;
           overflow: hidden !important;
+          opacity: 0 !important;
         }
 
-        /* 3. Modern Pill Toast Notifications & Alerts */
+        /* 3. Remove Profile Tab Unnecessary Clutter & Buttons */
+        /* Threads promotional buttons */
+        a[href*="threads.net"],
+        a[aria-label*="Threads" i],
+        svg[aria-label*="Threads" i],
+        div[role="button"]:has(svg[aria-label*="Threads" i]),
+        div:has(> a[href*="threads.net"]),
+        /* Camera / Create story buttons in profile header */
+        header a[href*="/stories/create"],
+        header svg[aria-label*="Camera" i],
+        header svg[aria-label*="Story" i],
+        header svg[aria-label*="Stories" i],
+        header div[role="button"]:has(svg[aria-label*="Camera" i]),
+        header div[role="button"]:has(svg[aria-label*="Story" i]),
+        /* Suggested accounts & discover people in profile */
+        button:has(svg[aria-label*="Discover" i]),
+        button:has(svg[aria-label*="Similar" i]),
+        a[href*="/similar_accounts/"],
+        div[data-testid*="suggested" i],
+        /* Reposts / Loop / Reels tabs in profile */
+        div[role="tablist"] a[href*="/reels/"],
+        div[role="tablist"] a[href*="/channel/"],
+        /* Native app upsell banners & buttons */
+        a[href*="instagram://"],
+        div:has(> a[href*="instagram://"]) {
+          display: none !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+          height: 0 !important;
+          overflow: hidden !important;
+        }
+
+        /* 4. Fix Profile UI: Clean Header, Spacing, and No Overlapping/Clipping */
+        header[role="banner"] {
+          background-color: #000000 !important;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+          height: 48px !important;
+        }
+
+        /* Profile page layout spacing: prevent fixed header from cutting off avatar & username */
+        main, section, div[role="main"] {
+          padding-top: 28px !important;
+          padding-bottom: 100px !important;
+        }
+
+        /* Ensure avatar circle is never clipped */
+        main header img,
+        main section img {
+          border-radius: 50% !important;
+          object-fit: cover !important;
+        }
+
+        /* Style Profile Action Buttons (Edit Profile, View Archive) into modern pills */
+        main section a[href*="/accounts/edit/"],
+        main section a[href*="/archive/"] {
+          border-radius: 9999px !important;
+          background: rgba(255, 255, 255, 0.12) !important;
+          border: 1px solid rgba(255, 255, 255, 0.20) !important;
+          color: #ffffff !important;
+          font-weight: 600 !important;
+          padding: 8px 16px !important;
+        }
+
+        /* Clean Profile Grid Tablist */
+        div[role="tablist"] {
+          border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+          background-color: transparent !important;
+        }
+
+        /* 5. Modern Pill Toast Notifications & Alerts */
         .toast-bar, 
         div[role="alert"], 
         div[role="status"],
@@ -101,19 +185,8 @@ const INJECTED_CSS_AND_PRELOAD = `
           overflow: visible !important;
         }
 
-        /* 3. Fast crisp header */
-        header[role="banner"] {
-          background-color: rgba(10, 10, 14, 0.95) !important;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-        }
-
         body, html { 
           background-color: #000000 !important; 
-        }
-
-        /* Reserve bottom space so page content is never obscured by the bottom bar */
-        main, section, div[role="main"] {
-          padding-bottom: 72px !important;
         }
       \`;
       (document.head || document.documentElement).appendChild(style);
@@ -124,14 +197,70 @@ const INJECTED_CSS_AND_PRELOAD = `
 
 const INJECTED_JAVASCRIPT = `
   (function() {
-    // Detect logged-in username for instant Profile tab navigation
+    // 1. Permanent DOM Cleaner Function
+    window.__anchorClean = function() {
+      try {
+        // Eradicate Instagram Mobile Web Bottom Bar permanently
+        // Remove any nav elements outside header
+        document.querySelectorAll('nav:not(header nav), div[role="navigation"]:not(header *)').forEach(function(el) {
+          if (!el.closest('header')) {
+            el.remove();
+          }
+        });
+
+        // Remove any fixed element at the bottom of the viewport
+        document.querySelectorAll('div, footer, section').forEach(function(el) {
+          if (el.closest('header')) return;
+          try {
+            var style = window.getComputedStyle(el);
+            if (style.position === 'fixed' || style.position === 'sticky') {
+              var b = parseInt(style.bottom);
+              if (b <= 5 || style.bottom === '0px') {
+                if (el.querySelector('a[href="/"], svg[aria-label*="Home" i], svg[aria-label*="Search" i], svg[aria-label*="Explore" i], svg[aria-label*="Reels" i], a[href*="/direct/"], img[alt*="profile picture" i]')) {
+                  el.remove();
+                }
+              }
+            }
+          } catch(e) {}
+        });
+
+        // Remove Threads and Story/Camera clutter from header
+        document.querySelectorAll('a[href*="threads.net"], svg[aria-label*="Threads" i], header a[href*="/stories/create"], header svg[aria-label*="Camera" i], header svg[aria-label*="Story" i]').forEach(function(el) {
+          var container = el.closest('a, button, div[role="button"]') || el;
+          container.remove();
+        });
+
+        // Remove Suggested/Discover people clutter
+        document.querySelectorAll('button:has(svg[aria-label*="Discover" i]), button:has(svg[aria-label*="Similar" i]), a[href*="/similar_accounts/"]').forEach(function(el) {
+          el.remove();
+        });
+      } catch(err) {}
+    };
+
+    // Run immediately and periodically
+    window.__anchorClean();
+    setInterval(window.__anchorClean, 400);
+
+    // MutationObserver to catch dynamically rendered elements
+    var observer = new MutationObserver(function() {
+      window.__anchorClean();
+    });
+    if (document.body) {
+      observer.observe(document.body, { childList: true, subtree: true });
+    } else {
+      document.addEventListener('DOMContentLoaded', function() {
+        observer.observe(document.body, { childList: true, subtree: true });
+      });
+    }
+
+    // 2. Detect logged-in username for instant Profile tab navigation
     function detectUser() {
       if (window.__ANCHOR_USER__) return;
       try {
-        const link = document.querySelector('a[href^="/"][role="link"]:has(img[alt*="profile picture" i])') ||
-                     document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])');
+        var link = document.querySelector('a[href^="/"][role="link"]:has(img[alt*="profile picture" i])') ||
+                   document.querySelector('a[href^="/"]:has(img[alt*="profile picture" i])');
         if (link) {
-          const u = (link.getAttribute('href') || '').replace(/\\//g, '').split('?')[0];
+          var u = (link.getAttribute('href') || '').replace(/\\//g, '').split('?')[0];
           if (u && !['explore', 'reels', 'direct', 'stories'].includes(u)) {
             window.__ANCHOR_USER__ = u;
             if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
@@ -145,12 +274,13 @@ const INJECTED_JAVASCRIPT = `
     detectUser();
     setInterval(detectUser, 1500);
 
-    // Fast direct tab router helper callable from native
+    // 3. Fast direct tab router helper callable from native
     window.__anchorRoute = function(destination) {
       if (destination === 'activity') {
-        const heart = document.querySelector('svg[aria-label*="Activity" i], svg[aria-label*="Notification" i], a[href*="/activity"]')?.closest('a, button, div[role="button"]');
-        if (heart) {
-          heart.click();
+        var heart = document.querySelector('svg[aria-label*="Activity" i], svg[aria-label*="Notification" i], a[href*="/activity"]');
+        var btn = heart ? heart.closest('a, button, div[role="button"]') : null;
+        if (btn) {
+          btn.click();
         } else {
           window.location.href = 'https://www.instagram.com/?activity=1';
         }
@@ -162,8 +292,9 @@ const INJECTED_JAVASCRIPT = `
         if (window.__ANCHOR_USER__) {
           window.location.href = 'https://www.instagram.com/' + window.__ANCHOR_USER__ + '/';
         } else {
-          const avatar = document.querySelector('img[alt*="profile picture" i]')?.closest('a');
-          if (avatar) avatar.click();
+          var avatar = document.querySelector('img[alt*="profile picture" i]');
+          var aLink = avatar ? avatar.closest('a') : null;
+          if (aLink) aLink.click();
           else window.location.href = 'https://www.instagram.com/accounts/edit/';
         }
       } else if (destination === 'settings') {
@@ -346,7 +477,27 @@ function MainScreen() {
         allowsBackForwardNavigationGestures={true}
         injectedJavaScriptBeforeContentLoaded={INJECTED_CSS_AND_PRELOAD}
         injectedJavaScript={INJECTED_JAVASCRIPT}
-        onNavigationStateChange={(navState) => setCanGoBack(navState.canGoBack)}
+        onNavigationStateChange={(navState) => {
+          setCanGoBack(navState.canGoBack);
+          if (webViewRef.current) {
+            webViewRef.current.injectJavaScript(`
+              if (typeof window.__anchorClean === 'function') {
+                window.__anchorClean();
+              }
+              true;
+            `);
+          }
+        }}
+        onLoadEnd={() => {
+          if (webViewRef.current) {
+            webViewRef.current.injectJavaScript(`
+              if (typeof window.__anchorClean === 'function') {
+                window.__anchorClean();
+              }
+              true;
+            `);
+          }
+        }}
         onMessage={onMessage}
         startInLoadingState={true}
         renderLoading={() => (

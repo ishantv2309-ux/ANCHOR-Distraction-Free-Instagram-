@@ -9,6 +9,8 @@ import {
   Platform,
   ActivityIndicator,
   useColorScheme,
+  Animated,
+  Easing,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -18,7 +20,7 @@ const USER_AGENT = Platform.OS === 'ios'
   ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
   : 'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
 
-// Lightweight pre-load script: syncs theme cookies & mocks matchMedia before React mounts
+// Lightweight pre-load script: syncs theme cookies, mocks matchMedia, and sets early gesture lock
 const getInitJS = (isDark) => `
   (function() {
     var themeMode = ${isDark ? "'dark'" : "'light'"};
@@ -48,6 +50,57 @@ const getInitJS = (isDark) => `
         return origMatch ? origMatch.apply(this, arguments) : { matches: false, media: q };
       };
     } catch(e) {}
+
+    // Early Reel gesture interception strictly for Reels opened from DMs/Inbox
+    var _startY = 0;
+    var _startX = 0;
+
+    // Track when user is inside /direct/ (messages)
+    try {
+      var initialPath = (window.location.pathname || '').toLowerCase();
+      if (initialPath.indexOf('/direct') !== -1) {
+        sessionStorage.setItem('anchor_from_dm', 'true');
+      }
+    } catch(e) {}
+
+    window.addEventListener('touchstart', function(e) {
+      if (e.touches && e.touches.length > 0) {
+        _startY = e.touches[0].clientY;
+        _startX = e.touches[0].clientX;
+      }
+    }, { capture: true, passive: true });
+
+    window.addEventListener('touchmove', function(e) {
+      var p = (window.location.pathname || '').toLowerCase();
+      if (p.indexOf('/direct') !== -1) {
+        try { sessionStorage.setItem('anchor_from_dm', 'true'); } catch(err) {}
+      }
+
+      var fromDm = false;
+      try { fromDm = sessionStorage.getItem('anchor_from_dm') === 'true'; } catch(err) {}
+
+      // Only lock if user came from DMs/Messages and is currently viewing a Reel
+      var isDirectInbox = p.indexOf('/direct/inbox') !== -1;
+      var isReel = (p.indexOf('/reel') !== -1 || p.indexOf('/p/') !== -1 || (!isDirectInbox && !!document.querySelector('div[role="dialog"] video, div[aria-modal="true"] video, section video')));
+
+      if (!fromDm || !isReel) return;
+
+      if (e.touches && e.touches.length > 0) {
+        var dY = Math.abs(e.touches[0].clientY - _startY);
+        var dX = Math.abs(e.touches[0].clientX - _startX);
+        if (dY > 6 && dY > dX) {
+          if (e.cancelable) {
+            e.preventDefault();
+          }
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          if (typeof window.__showAnchorOverlay === 'function') {
+            window.__showAnchorOverlay();
+          }
+          return false;
+        }
+      }
+    }, { capture: true, passive: false });
   })();
   true;
 `;
@@ -80,14 +133,18 @@ const getInjectedJS = (isDark) => `
       style.id = styleId;
       style.textContent = \`
         /* Root container background */
-        html, body {
+        html, body, main {
           background-color: \${isDarkMode ? '#000000' : '#FFFFFF'} !important;
         }
 
-        /* Remove artificial wireframe box outlines */
+        /* Explicitly strip custom border strokes, outlines, and box-shadows from generic tags */
         * {
           outline: none !important;
           -webkit-tap-highlight-color: transparent !important;
+        }
+        div, span, button {
+          outline: none !important;
+          box-shadow: none !important;
         }
 
         /* Set Instagram CSS variables for dark/light themes */
@@ -108,15 +165,15 @@ const getInjectedJS = (isDark) => `
           --link: \${isDarkMode ? '#FFFFFF' : '#000000'} !important;
         }
 
-        /* Crisp High-Contrast White Text in Dark Mode (Eliminates dark blue text) */
+        /* Crisp High-Contrast Text across headings, labels, and spans */
         \${isDarkMode ? \`
-          /* Menu item links and row text */
-          a,
-          a:visited,
-          a:hover,
-          a:active,
-          a span,
-          a div,
+          /* High-contrast primary text in dark mode */
+          h1, h2, h3, h4, h5, h6,
+          div[role="heading"],
+          header h1, header h2, header span,
+          label, span, p, a,
+          a:visited, a:hover, a:active,
+          a span, a div,
           div[role="list"] a,
           div[role="list"] a span,
           div[role="list"] a div,
@@ -126,18 +183,17 @@ const getInjectedJS = (isDark) => `
             color: #FFFFFF !important;
           }
 
+          /* Profile statistics counts & labels */
+          header section ul li span,
+          header section ul li a {
+            color: #FFFFFF !important;
+          }
+
           /* Secondary descriptions in menus */
           div[role="list"] a span:last-child,
           a span > span,
           a p {
             color: #A8A8A8 !important;
-          }
-
-          /* Section titles in Settings */
-          h1, h2, h3, h4,
-          div[role="heading"],
-          header h1, header h2, header span {
-            color: #FFFFFF !important;
           }
 
           /* Menu icons & SVGs in links */
@@ -156,7 +212,7 @@ const getInjectedJS = (isDark) => `
             fill: #FFFFFF !important;
           }
 
-          /* Fix white surface on Search Bar */
+          /* Fix white surface on Search Bar and Inputs */
           input, input[type="text"], input[type="search"], div[role="search"] input {
             background-color: #262626 !important;
             color: #FFFFFF !important;
@@ -164,6 +220,20 @@ const getInjectedJS = (isDark) => `
           }
           input::placeholder {
             color: #8E8E93 !important;
+          }
+
+          /* Chat Composer Inputs & Textareas in Dark Mode */
+          textarea,
+          div[contenteditable="true"],
+          div[role="textbox"] {
+            color: #FFFFFF !important;
+            -webkit-text-fill-color: #FFFFFF !important;
+          }
+          textarea::placeholder,
+          div[contenteditable="true"]::placeholder,
+          div[role="textbox"]::placeholder {
+            color: #8E8E93 !important;
+            -webkit-text-fill-color: #8E8E93 !important;
           }
 
           /* Fix white surface on "Your note" popover speech bubble and dialogs */
@@ -188,11 +258,22 @@ const getInjectedJS = (isDark) => `
             color: #FFFFFF !important;
           }
         \` : \`
-          a, a span {
+          h1, h2, h3, h4, h5, h6,
+          label, span, p, a, a span {
+            color: #000000 !important;
+          }
+          header section ul li span,
+          header section ul li a {
             color: #000000 !important;
           }
           a svg, div[role="list"] svg {
             color: #000000 !important;
+          }
+          textarea,
+          div[contenteditable="true"],
+          div[role="textbox"] {
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
           }
         \`}
 
@@ -209,53 +290,103 @@ const getInjectedJS = (isDark) => `
           pointer-events: none !important;
         }
 
-        /* Permanently Hide Instagram's Original Bottom Navigation Bar via CSS */
-        footer {
+        /* Hide Instagram's Original Bottom Navigation Bar only outside direct messages */
+        body:not([data-in-direct="true"]) footer:not(:has(textarea)):not(:has(input)):not(:has(div[contenteditable="true"])):not(:has(form)),
+        body:not([data-in-direct="true"]) nav:not(header *):not(:has(textarea)):not(:has(input)),
+        body:not([data-in-direct="true"]) div[role="navigation"]:not(header *):not(:has(textarea)):not(:has(input)) {
           display: none !important;
           visibility: hidden !important;
+          opacity: 0 !important;
           height: 0px !important;
+          max-height: 0px !important;
+          overflow: hidden !important;
           pointer-events: none !important;
         }
 
-        /* Clean Profile: Hide Saved / Bookmark tab */
-        a[href*="/saved/"],
-        svg[aria-label="Saved"],
-        svg[aria-label*="Saved" i],
-        div[role="tab"]:has(svg[aria-label*="Saved" i]) {
-          display: none !important;
-          visibility: hidden !important;
-          pointer-events: none !important;
+        /* Protect and guarantee Direct Message Composer is visible and usable */
+        footer:has(textarea),
+        footer:has(input),
+        footer:has(div[contenteditable="true"]),
+        footer:has(form),
+        div:has(> textarea),
+        div:has(> div[contenteditable="true"]),
+        div[role="region"]:has(textarea),
+        div[role="region"]:has(div[contenteditable="true"]),
+        form:has(textarea),
+        form:has(input) {
+          display: flex !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+          pointer-events: auto !important;
         }
 
-        /* Permanently Hide all "Use the app" sticky bottom banners & install prompts */
+        /* Permanently Hide all "Use the App", "Open the App", smart banners, and deep-link prompts */
         .smartbanner,
+        [class*="smartbanner" i],
+        [class*="smart-banner" i],
+        [class*="app-banner" i],
+        [class*="app-link" i],
+        [class*="app_link" i],
+        [class*="banner" i]:not([role="region"]):not(form):not(:has(textarea)):not(:has(input)),
+        [id*="smartbanner" i],
+        [id*="app-banner" i],
+        [id*="app-link" i],
         [aria-label*="Use the app" i],
         [aria-label*="Get the app" i],
         [aria-label*="Open in app" i],
+        [aria-label*="Open the app" i],
+        [aria-label*="Install app" i],
+        [aria-label*="Install the app" i],
+        [aria-label*="Download Instagram" i],
         a[href*="itunes.apple.com"],
+        a[href*="apps.apple.com"],
         a[href*="play.google.com"],
         a[href*="instagram://"],
         div[data-testid*="app-upsell"],
         div[data-testid*="smart-banner"],
-        div[data-testid*="open-in-app"] {
+        div[data-testid*="open-in-app"],
+        div[data-testid*="get-app"],
+        div[data-testid*="install-app"],
+        div[style*="position: fixed"][style*="bottom"]:has(a[href*="instagram://"]),
+        div[style*="position: fixed"][style*="bottom"]:has(a[href*="apple.com"]),
+        div[style*="position: fixed"][style*="bottom"]:has(a[href*="google.com"]),
+        div[style*="position: sticky"][style*="bottom"]:has(a[href*="instagram://"]),
+        div[style*="position: sticky"][style*="bottom"]:has(a[href*="apple.com"]),
+        div[style*="position: sticky"][style*="bottom"]:has(a[href*="google.com"]) {
           display: none !important;
           visibility: hidden !important;
-          pointer-events: none !important;
-          height: 0 !important;
-          max-height: 0 !important;
-          overflow: hidden !important;
           opacity: 0 !important;
+          pointer-events: none !important;
+          height: 0px !important;
+          max-height: 0px !important;
+          overflow: hidden !important;
         }
 
-        /* Safe bottom scrolling clearance on main container */
-        main[role="main"], main {
-          padding-bottom: 74px !important;
+        /* Safe 95px bottom scrolling clearance on main container EXCEPT when inside chat thread */
+        body:not([data-in-chat="true"]) main[role="main"],
+        body:not([data-in-chat="true"]) main {
+          padding-bottom: 95px !important;
+        }
+        body[data-in-chat="true"] main[role="main"],
+        body[data-in-chat="true"] main {
+          padding-bottom: 0px !important;
         }
 
         /* Kill vertical scroll snap on Reel screens */
         html, body, main, section, div[role="dialog"], div[aria-modal="true"] {
           overscroll-behavior-y: none !important;
           scroll-snap-type: none !important;
+        }
+
+        /* Strict Single-Reel Lock: hardware level touch lock */
+        body.anchor-reel-page,
+        body.anchor-reel-page main,
+        body.anchor-reel-page section,
+        body.anchor-reel-page div[role="dialog"],
+        body.anchor-reel-page div[aria-modal="true"] {
+          overflow-y: hidden !important;
+          scroll-snap-type: none !important;
+          touch-action: pan-x pinch-zoom !important;
         }
       \`;
       (document.head || document.documentElement).appendChild(style);
@@ -264,30 +395,38 @@ const getInjectedJS = (isDark) => `
     // 4. PRECISE ERADICATION OF INSTAGRAM'S ORIGINAL BOTTOM BAR
     function eradicateInstagramBottomBar() {
       var isDirectInbox = (window.location.pathname || '').indexOf('/direct') !== -1;
+
+      // CRITICAL: If we are in Direct (inbox or inside a chat thread), DO NOT TOUCH anything!
+      // This protects the message composer, chat thread, and keyboard inputs completely.
+      if (isDirectInbox) return;
+
       var winH = window.innerHeight || 800;
 
-      // Direct hide footer
-      var footers = document.querySelectorAll('footer');
+      // Direct hide footer and nav on non-direct pages (only if it has no inputs)
+      var footers = document.querySelectorAll('footer, nav:not(header *), div[role="navigation"]:not(header *)');
       for (var f = 0; f < footers.length; f++) {
-        footers[f].style.setProperty('display', 'none', 'important');
+        var foot = footers[f];
+        if (foot.querySelector('textarea, input, [contenteditable="true"], form')) continue;
+        foot.style.setProperty('display', 'none', 'important');
+        foot.style.setProperty('visibility', 'hidden', 'important');
+        foot.style.setProperty('height', '0px', 'important');
+        foot.style.setProperty('pointer-events', 'none', 'important');
       }
-
-      // If we are in Direct inbox/chat, do NOT touch any message threads or containers
-      if (isDirectInbox) return;
 
       // Method 1: Target Home link icon in the bottom bar (never top header)
       var homeLinks = document.querySelectorAll('a[href="/"], a[href="/?variant=home"], svg[aria-label*="Home" i]');
       for (var h = 0; h < homeLinks.length; h++) {
         var hl = homeLinks[h];
         var hlR = hl.getBoundingClientRect();
-        if (hlR.top > winH - 90 && hlR.top > 200) {
+        if (hlR.top > winH - 120 && hlR.top > 200) {
           hl.style.setProperty('display', 'none', 'important');
           var curr = hl.parentElement;
           while (curr && curr !== document.body && curr !== document.documentElement && curr.tagName !== 'MAIN' && curr.id !== 'react-root') {
             var st = window.getComputedStyle(curr);
             var r = curr.getBoundingClientRect();
-            if ((st.position === 'fixed' || st.position === 'sticky') && r.top > winH - 90) {
+            if ((st.position === 'fixed' || st.position === 'sticky') && r.top > winH - 120) {
               curr.style.setProperty('display', 'none', 'important');
+              curr.style.setProperty('visibility', 'hidden', 'important');
               curr.style.setProperty('height', '0px', 'important');
               curr.style.setProperty('pointer-events', 'none', 'important');
               break;
@@ -302,14 +441,15 @@ const getInjectedJS = (isDark) => `
       for (var i = 0; i < avatars.length; i++) {
         var img = avatars[i];
         var imgR = img.getBoundingClientRect();
-        // The bottom bar avatar is tiny (< 36px) and located in the bottom 90px
-        if (imgR.height > 15 && imgR.height < 36 && imgR.top > winH - 90) {
+        // The bottom bar avatar is tiny (< 36px) and located in the bottom 120px
+        if (imgR.height > 15 && imgR.height < 48 && imgR.top > winH - 120) {
           var cur = img.parentElement;
           while (cur && cur !== document.body && cur !== document.documentElement && cur.tagName !== 'MAIN' && cur.id !== 'react-root') {
             var comp = window.getComputedStyle(cur);
             var curR = cur.getBoundingClientRect();
-            if ((comp.position === 'fixed' || comp.position === 'sticky') && curR.top > winH - 90) {
+            if ((comp.position === 'fixed' || comp.position === 'sticky') && curR.top > winH - 120) {
               cur.style.setProperty('display', 'none', 'important');
+              cur.style.setProperty('visibility', 'hidden', 'important');
               cur.style.setProperty('height', '0px', 'important');
               cur.style.setProperty('pointer-events', 'none', 'important');
               break;
@@ -322,25 +462,107 @@ const getInjectedJS = (isDark) => `
     eradicateInstagramBottomBar();
     setInterval(eradicateInstagramBottomBar, 300);
 
-    // 5. Active banner purger: Permanently removes "Use the app" sticky prompt bar
+    // 5. Active banner purger: Permanently removes all "Use the app", "Open the App" & App Store prompts
     function purgeAppPrompts() {
+      var pathname = (window.location.pathname || '').toLowerCase();
+      // Never purge inside active chat threads!
+      if (pathname.indexOf('/direct/t/') !== -1 || pathname.indexOf('/direct/thread/') !== -1) {
+        return;
+      }
+
+      // Query selector targeting class names, attributes, and deep links
+      var bannerSelectors = [
+        '.smartbanner',
+        '[class*="smartbanner" i]',
+        '[class*="smart-banner" i]',
+        '[class*="app-banner" i]',
+        '[class*="app-link" i]',
+        '[class*="app_link" i]',
+        '[class*="banner" i]:not([role="region"]):not(form)',
+        '[id*="smartbanner" i]',
+        '[id*="app-banner" i]',
+        '[id*="app-link" i]',
+        'a[href*="instagram://"]',
+        'a[href*="itunes.apple.com"]',
+        'a[href*="apps.apple.com"]',
+        'a[href*="play.google.com"]',
+        'div[data-testid*="app-upsell"]',
+        'div[data-testid*="smart-banner"]',
+        'div[data-testid*="open-in-app"]',
+        'div[data-testid*="get-app"]',
+        'div[data-testid*="install-app"]'
+      ].join(', ');
+
+      try {
+        var queryBanners = document.querySelectorAll(bannerSelectors);
+        for (var b = 0; b < queryBanners.length; b++) {
+          var item = queryBanners[b];
+          if (item.querySelector && item.querySelector('textarea, input, [contenteditable="true"]')) continue;
+          var container = item.closest('div[style*="fixed"], div[style*="sticky"], div[role="banner"]') || item;
+          if (container && container !== document.body && container !== document.documentElement && container.tagName !== 'MAIN') {
+            if (container.querySelector && container.querySelector('textarea, input, [contenteditable="true"], form')) continue;
+            container.style.setProperty('display', 'none', 'important');
+            container.style.setProperty('visibility', 'hidden', 'important');
+            container.style.setProperty('opacity', '0', 'important');
+            container.style.setProperty('pointer-events', 'none', 'important');
+            container.style.setProperty('height', '0px', 'important');
+            container.style.setProperty('max-height', '0px', 'important');
+            container.style.setProperty('overflow', 'hidden', 'important');
+          }
+        }
+      } catch(e) {}
+
+      // Text scan for button/span labels
       var allBanners = document.querySelectorAll('a, button, span, div, p');
+      var forbiddenTexts = [
+        'use the app',
+        'open the app',
+        'open in app',
+        'get the app',
+        'install the app',
+        'install app',
+        'download instagram',
+        'get instagram'
+      ];
+
       for (var i = 0; i < allBanners.length; i++) {
         var el = allBanners[i];
         var text = (el.textContent || '').trim().toLowerCase();
-        if (text === 'use the app' || text === 'open in app' || text === 'get the app') {
-          var container = el.closest('div[style*="fixed"], div[style*="sticky"], div[role="banner"]') || el.parentElement;
-          if (container && container !== document.body && container !== document.documentElement && container.tagName !== 'MAIN') {
-            container.style.setProperty('display', 'none', 'important');
-            container.style.setProperty('visibility', 'hidden', 'important');
-            container.style.setProperty('height', '0px', 'important');
-            container.style.setProperty('pointer-events', 'none', 'important');
+        if (forbiddenTexts.indexOf(text) !== -1) {
+          var box = el.closest('div[style*="fixed"], div[style*="sticky"], div[role="banner"]') || el.parentElement;
+          if (box && box !== document.body && box !== document.documentElement && box.tagName !== 'MAIN') {
+            if (box.querySelector && box.querySelector('textarea, input, [contenteditable="true"], form')) continue;
+            box.style.setProperty('display', 'none', 'important');
+            box.style.setProperty('visibility', 'hidden', 'important');
+            box.style.setProperty('opacity', '0', 'important');
+            box.style.setProperty('pointer-events', 'none', 'important');
+            box.style.setProperty('height', '0px', 'important');
+            box.style.setProperty('max-height', '0px', 'important');
+            box.style.setProperty('overflow', 'hidden', 'important');
           }
         }
       }
     }
     purgeAppPrompts();
-    setInterval(purgeAppPrompts, 800);
+    setInterval(purgeAppPrompts, 600);
+
+    // Suppress deep-link click events to instagram:// or app store URLs
+    document.addEventListener('click', function(e) {
+      var a = e.target ? e.target.closest('a') : null;
+      if (a && a.href) {
+        var h = (a.href || '').toLowerCase();
+        if (
+          h.indexOf('instagram://') !== -1 ||
+          h.indexOf('itunes.apple.com') !== -1 ||
+          h.indexOf('apps.apple.com') !== -1 ||
+          h.indexOf('play.google.com') !== -1
+        ) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }
+      }
+    }, { capture: true });
 
     // 6. Block Global Reels Feed & Algorithmic Feeds
     function blockGlobalFeed() {
@@ -352,13 +574,36 @@ const getInjectedJS = (isDark) => `
     blockGlobalFeed();
     setInterval(blockGlobalFeed, 800);
 
-    // 7. Strict Single-Reel Playback & Touch Interceptor Engine
+    // 7. Strict Single-Reel Playback & Touch Interceptor Engine (Only for Reels opened in DM inbox)
     function isReelPage() {
       var p = (window.location.pathname || '').toLowerCase();
+
+      // Check if user is navigating in profile Saved or reposts
+      if (p.indexOf('/saved') !== -1 || p.indexOf('/reels') !== -1 && p.indexOf('/direct') === -1 && !sessionStorage.getItem('anchor_from_dm')) {
+        return false;
+      }
+
+      // If user came from DMs, check for reel
+      var fromDm = false;
+      try {
+        fromDm = sessionStorage.getItem('anchor_from_dm') === 'true';
+      } catch(e) {}
+
+      if (!fromDm) return false;
+
+      // Direct path match
       if (p.indexOf('/reel/') !== -1 || p.indexOf('/reels/') !== -1 || p.startsWith('/reel') || p.startsWith('/p/')) {
         return true;
       }
-      if (document.querySelector('div[role="dialog"] video, div[aria-modal="true"] video, section video')) {
+      // Query param or hash
+      var fullUrl = (window.location.href || '').toLowerCase();
+      if (fullUrl.indexOf('/reel/') !== -1 || fullUrl.indexOf('/reels/') !== -1) {
+        return true;
+      }
+      // Inside active DM thread with a video element
+      var isDirectInbox = p.indexOf('/direct/inbox') !== -1;
+      var hasReelVideo = !!document.querySelector('div[role="dialog"] video, div[aria-modal="true"] video, section video');
+      if (hasReelVideo && !isDirectInbox) {
         return true;
       }
       return false;
@@ -366,13 +611,13 @@ const getInjectedJS = (isDark) => `
 
     function extractReelId(url) {
       if (!url) return null;
-      var m = url.toString().match(/\\/(reels?|p)\\/([A-Za-z0-9_-]+)/i);
+      var m = url.toString().match(/\/(reels?|p)\/([A-Za-z0-9_-]+)/i);
       return m ? m[2] : null;
     }
 
     var lockedReelId = extractReelId(window.location.pathname);
 
-    // Clean overlay modal when user attempts to scroll to subsequent Reels
+    // Clean overlay modal explicitly stating: "Focus Mode Active"
     function showFocusOverlay() {
       var existing = document.getElementById('anchor-focus-overlay');
       if (existing) {
@@ -382,24 +627,24 @@ const getInjectedJS = (isDark) => `
 
       var overlay = document.createElement('div');
       overlay.id = 'anchor-focus-overlay';
-      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.72);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:24px;box-sizing:border-box;';
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.78);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding:24px;box-sizing:border-box;';
 
       overlay.innerHTML = \`
-        <div style="background:rgba(28,28,32,0.96);border:1px solid rgba(255,255,255,0.15);border-radius:24px;padding:26px 22px;max-width:320px;width:100%;text-align:center;box-shadow:0 16px 40px rgba(0,0,0,0.6);font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
-          <div style="width:48px;height:48px;border-radius:24px;background:rgba(52,199,89,0.15);border:1px solid rgba(52,199,89,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:22px;">
+        <div style="background:rgba(28,28,32,0.98);border:1px solid rgba(255,255,255,0.18);border-radius:24px;padding:26px 22px;max-width:320px;width:100%;text-align:center;box-shadow:0 20px 48px rgba(0,0,0,0.7);font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
+          <div style="width:52px;height:52px;border-radius:26px;background:rgba(52,199,89,0.15);border:1px solid rgba(52,199,89,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px;">
             ⚓
           </div>
-          <h3 style="color:#ffffff;font-size:17px;font-weight:700;margin:0 0 8px;letter-spacing:-0.2px;">
+          <h3 style="color:#ffffff;font-size:18px;font-weight:700;margin:0 0 10px;letter-spacing:-0.2px;">
             Focus Mode Active
           </h3>
-          <p style="color:rgba(255,255,255,0.8);font-size:14px;line-height:20px;margin:0 0 22px;">
+          <p style="color:rgba(255,255,255,0.85);font-size:14px;line-height:20px;margin:0 0 22px;">
             Scrolling to the next Reel is disabled.
           </p>
           <button id="anchor-back-msgs-btn" style="width:100%;background:#0095F6;color:#ffffff;border:none;border-radius:22px;padding:12px 18px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;-webkit-tap-highlight-color:transparent;">
             Back to Messages
           </button>
           <button id="anchor-dismiss-btn" style="width:100%;background:transparent;color:rgba(255,255,255,0.6);border:none;padding:8px;font-size:13px;cursor:pointer;-webkit-tap-highlight-color:transparent;">
-            Keep Watching
+            Stay on this Reel
           </button>
         </div>
       \`;
@@ -410,6 +655,11 @@ const getInjectedJS = (isDark) => `
       if (backBtn) {
         backBtn.addEventListener('click', function(e) {
           e.stopPropagation();
+          try {
+            overlay.remove();
+          } catch(err) {
+            overlay.style.display = 'none';
+          }
           window.location.href = 'https://www.instagram.com/direct/inbox/';
         });
       }
@@ -428,46 +678,130 @@ const getInjectedJS = (isDark) => `
         }
       });
     }
+    window.__showAnchorOverlay = showFocusOverlay;
+
+    // Continuous DOM lockdown for Reel slides
+    function lockReelDOM() {
+      var isReel = isReelPage();
+      if (!isReel) {
+        if (document.body) {
+          document.body.classList.remove('anchor-reel-page');
+          document.body.style.removeProperty('overflow');
+        }
+        var p = (window.location.pathname || '').toLowerCase();
+        if (p.indexOf('/direct') !== -1) {
+          lockedReelId = null;
+        }
+        return;
+      }
+
+      if (document.body) {
+        if (!document.body.classList.contains('anchor-reel-page')) {
+          document.body.classList.add('anchor-reel-page');
+        }
+        document.body.style.setProperty('overflow', 'hidden', 'important');
+        document.body.style.setProperty('touch-action', 'pan-x pinch-zoom', 'important');
+      }
+
+      if (document.documentElement) {
+        document.documentElement.style.setProperty('overflow', 'hidden', 'important');
+      }
+
+      if (!lockedReelId) {
+        lockedReelId = extractReelId(window.location.pathname) || 'active-dm-reel';
+      }
+
+      // Hide next/previous slide navigation buttons/chevrons in Reels
+      var navButtons = document.querySelectorAll('button[aria-label*="Next" i], button[aria-label*="Previous" i], svg[aria-label*="Down chevron" i], svg[aria-label*="Up chevron" i]');
+      for (var b = 0; b < navButtons.length; b++) {
+        var btn = navButtons[b].closest('button, div[role="button"]') || navButtons[b];
+        btn.style.setProperty('display', 'none', 'important');
+      }
+
+      // Find all scroll parent containers and enforce hardware touch lock
+      var videos = document.querySelectorAll('video');
+      for (var v = 0; v < videos.length; v++) {
+        var vid = videos[v];
+        var curr = vid.parentElement;
+        while (curr && curr !== document.body && curr !== document.documentElement) {
+          curr.style.setProperty('overflow-y', 'hidden', 'important');
+          curr.style.setProperty('scroll-snap-type', 'none', 'important');
+          curr.style.setProperty('touch-action', 'pan-x pinch-zoom', 'important');
+
+          // Hide subsequent sibling slides if any exist
+          var nextSib = curr.nextElementSibling;
+          while (nextSib) {
+            nextSib.style.setProperty('display', 'none', 'important');
+            nextSib = nextSib.nextElementSibling;
+          }
+          curr = curr.parentElement;
+        }
+      }
+    }
+    lockReelDOM();
+    setInterval(lockReelDOM, 150);
 
     // Intercept Vertical Touch Gestures (Swipe Up / Swipe Down) on Reels
     var touchStartY = 0;
     var touchStartX = 0;
-    var scrollTriggered = false;
+    var touchActive = false;
 
-    window.addEventListener('touchstart', function(e) {
+    function handleTouchStart(e) {
       if (e.touches && e.touches.length > 0) {
         touchStartY = e.touches[0].clientY;
         touchStartX = e.touches[0].clientX;
-        scrollTriggered = false;
+        touchActive = true;
       }
-    }, { capture: true, passive: true });
+    }
 
-    window.addEventListener('touchmove', function(e) {
+    function handleTouchMove(e) {
       if (!isReelPage()) return;
-      if (e.touches && e.touches.length > 0) {
-        var currentY = e.touches[0].clientY;
-        var currentX = e.touches[0].clientX;
-        var deltaY = Math.abs(currentY - touchStartY);
-        var deltaX = Math.abs(currentX - touchStartX);
+      if (!touchActive || !e.touches || e.touches.length === 0) return;
 
-        if (deltaY > 12 && deltaY > deltaX) {
+      var currentY = e.touches[0].clientY;
+      var currentX = e.touches[0].clientX;
+      var deltaY = Math.abs(currentY - touchStartY);
+      var deltaX = Math.abs(currentX - touchStartX);
+
+      // Any vertical swipe attempt
+      if (deltaY > 6 && deltaY > deltaX) {
+        if (e.cancelable) {
           e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
+        }
+        e.stopPropagation();
+        e.stopImmediatePropagation();
 
-          if (!scrollTriggered && deltaY > 20) {
-            scrollTriggered = true;
-            showFocusOverlay();
-          }
-          return false;
+        if (deltaY > 12) {
+          showFocusOverlay();
+        }
+        return false;
+      }
+    }
+
+    function handleTouchEnd(e) {
+      touchActive = false;
+    }
+
+    // Attach listeners to window, document, and document.body
+    window.addEventListener('touchstart', handleTouchStart, { capture: true, passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { capture: true, passive: false });
+    window.addEventListener('touchend', handleTouchEnd, { capture: true, passive: true });
+    document.addEventListener('touchmove', handleTouchMove, { capture: true, passive: false });
+
+    // Block native scroll events when on Reel
+    window.addEventListener('scroll', function(e) {
+      if (isReelPage()) {
+        if (window.scrollY > 2) {
+          window.scrollTo(0, 0);
+          showFocusOverlay();
         }
       }
-    }, { capture: true, passive: false });
+    }, { capture: true });
 
     // Block mouse wheel / trackpad scrolling on Reels
     window.addEventListener('wheel', function(e) {
       if (!isReelPage()) return;
-      if (Math.abs(e.deltaY) > 8) {
+      if (Math.abs(e.deltaY) > 5) {
         e.preventDefault();
         e.stopPropagation();
         showFocusOverlay();
@@ -477,7 +811,7 @@ const getInjectedJS = (isDark) => `
     // Block Arrow/Page scroll keys on Reels
     window.addEventListener('keydown', function(e) {
       if (!isReelPage()) return;
-      if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', ' '].indexOf(e.key) !== -1) {
+      if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', ' ', 'j', 'k'].indexOf(e.key) !== -1) {
         var tag = (e.target && e.target.tagName ? e.target.tagName.toLowerCase() : '');
         if (tag !== 'input' && tag !== 'textarea') {
           e.preventDefault();
@@ -506,7 +840,9 @@ const getInjectedJS = (isDark) => `
           }
         }
       }
-      return origPushState.apply(this, arguments);
+      var res = origPushState.apply(this, arguments);
+      setTimeout(syncRouteState, 30);
+      return res;
     };
 
     var origReplaceState = history.replaceState;
@@ -527,7 +863,9 @@ const getInjectedJS = (isDark) => `
           }
         }
       }
-      return origReplaceState.apply(this, arguments);
+      var res = origReplaceState.apply(this, arguments);
+      setTimeout(syncRouteState, 30);
+      return res;
     };
 
     // 8. Robust Logged-In User Extraction
@@ -537,7 +875,7 @@ const getInjectedJS = (isDark) => `
 
       try {
         if (window.location && window.location.pathname) {
-          var p = window.location.pathname.replace(/^\\/+|\\/+$/g, '');
+          var p = window.location.pathname.replace(/^\/+|\/+$/g, '');
           if (p && p.indexOf('/') === -1 && /^[a-zA-Z0-9._]{1,30}$/.test(p) && ignored.indexOf(p.toLowerCase()) === -1) {
             window.__ANCHOR_USER__ = p;
             if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOGGED_IN_USER', username: p }));
@@ -571,7 +909,7 @@ const getInjectedJS = (isDark) => `
         for (var i = 0; i < anchors.length; i++) {
           var a = anchors[i];
           if (a.querySelector('img[alt*="profile picture" i]') || a.querySelector('img[alt*="profile" i]')) {
-            var h = (a.getAttribute('href') || '').replace(/^\\/+|\\/+$/g, '');
+            var h = (a.getAttribute('href') || '').replace(/^\/+|\/+$/g, '');
             if (h && h.indexOf('/') === -1 && /^[a-zA-Z0-9._]{1,30}$/.test(h) && ignored.indexOf(h.toLowerCase()) === -1) {
               window.__ANCHOR_USER__ = h;
               if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOGGED_IN_USER', username: h }));
@@ -582,7 +920,7 @@ const getInjectedJS = (isDark) => `
 
         var headerEls = document.querySelectorAll('header span, header h1, header button span, header div[role="button"]');
         for (var i = 0; i < headerEls.length; i++) {
-          var raw = (headerEls[i].textContent || '').trim().split('\\n')[0].replace(/[∨⌄▼v\\s]/g, '');
+          var raw = (headerEls[i].textContent || '').trim().split('\n')[0].replace(/[∨⌄▼v\s]/g, '');
           if (/^[a-zA-Z0-9._]{3,30}$/.test(raw) && ignored.indexOf(raw.toLowerCase()) === -1) {
             window.__ANCHOR_USER__ = raw;
             if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOGGED_IN_USER', username: raw }));
@@ -611,6 +949,34 @@ const getInjectedJS = (isDark) => `
       }
     }, 2000);
 
+    // 9. Synchronize Route State, Chat Thread Detection & Composer Protection
+    var lastRecordedPath = '';
+    function syncRouteState() {
+      var currentPath = window.location.pathname || '';
+      var pathLower = currentPath.toLowerCase();
+      var isDirect = pathLower.indexOf('/direct') !== -1;
+      var isChat = pathLower.indexOf('/direct/t/') !== -1 || pathLower.indexOf('/direct/thread/') !== -1;
+
+      if (document.body) {
+        document.body.setAttribute('data-in-direct', isDirect ? 'true' : 'false');
+        document.body.setAttribute('data-in-chat', isChat ? 'true' : 'false');
+      }
+
+      if (currentPath !== lastRecordedPath) {
+        lastRecordedPath = currentPath;
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'ROUTE_CHANGE',
+            pathname: currentPath,
+            isChatThread: isChat
+          }));
+        }
+      }
+    }
+    syncRouteState();
+    setInterval(syncRouteState, 200);
+    window.addEventListener('popstate', syncRouteState);
+
     // Reliable native router
     window.__anchorRoute = function(destination) {
       if (destination === 'activity') {
@@ -629,12 +995,12 @@ const getInjectedJS = (isDark) => `
         }
         window.location.href = 'https://www.instagram.com/accounts/edit/';
       } else if (destination === 'settings') {
-        var gear = document.querySelector('svg[aria-label*="Options" i], svg[aria-label*="Settings" i], a[href*="/accounts/settings/"]');
+        var gear = document.querySelector('svg[aria-label*="Options" i], svg[aria-label*="Settings" i], a[href*="/settings/"], a[href*="/accounts/settings/"]');
         var gearBtn = gear ? gear.closest('a, button, div[role="button"]') : null;
         if (gearBtn) {
           gearBtn.click();
         } else {
-          window.location.href = 'https://www.instagram.com/accounts/settings/';
+          window.location.href = 'https://www.instagram.com/settings/';
         }
       }
     };
@@ -705,9 +1071,25 @@ function MainApp() {
   const [activeTab, setActiveTab] = useState('messages');
   const [canGoBack, setCanGoBack] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState('nagumoo_001');
+  const [isInChatThread, setIsInChatThread] = useState(false);
+  const [navBarWidth, setNavBarWidth] = useState(0);
   const insets = useSafeAreaInsets();
   const systemColorScheme = useColorScheme();
   const isDark = systemColorScheme === 'dark';
+
+  const tabIndexAnim = useRef(new Animated.Value(1)).current; // 'messages' is index 1
+
+  useEffect(() => {
+    const targetIdx = TABS.findIndex((t) => t.id === activeTab);
+    if (targetIdx !== -1) {
+      Animated.timing(tabIndexAnim, {
+        toValue: targetIdx,
+        duration: 300,
+        easing: Easing.bezier(0.4, 0, 0.2, 1),
+        useNativeDriver: false,
+      }).start();
+    }
+  }, [activeTab]);
 
   const themeBg = isDark ? '#000000' : '#FFFFFF';
   const textColor = isDark ? '#FFFFFF' : '#000000';
@@ -729,8 +1111,22 @@ function MainApp() {
   const onMessage = (event) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
-      if (data && data.type === 'LOGGED_IN_USER' && data.username) {
+      if (!data) return;
+      if (data.type === 'LOGGED_IN_USER' && data.username) {
         setLoggedInUser(data.username);
+      }
+      if (data.type === 'ROUTE_CHANGE') {
+        setIsInChatThread(!!data.isChatThread);
+        const p = (data.pathname || '').toLowerCase();
+        if (p.indexOf('/direct/inbox') !== -1 || p.indexOf('/direct/t/') !== -1 || p.indexOf('/direct/thread/') !== -1) {
+          setActiveTab('messages');
+        } else if (p.indexOf('/accounts/activity') !== -1) {
+          setActiveTab('activity');
+        } else if (p.indexOf('/accounts/settings') !== -1 || p.indexOf('/accounts/edit') !== -1) {
+          setActiveTab('settings');
+        } else if (loggedInUser && p.indexOf(`/${loggedInUser.toLowerCase()}`) !== -1) {
+          setActiveTab('profile');
+        }
       }
     } catch (e) {}
   };
@@ -740,13 +1136,22 @@ function MainApp() {
     if (!webViewRef.current) return;
 
     if (tab === 'activity') {
-      webViewRef.current.injectJavaScript("window.location.href = 'https://www.instagram.com/accounts/activity/'; true;");
+      webViewRef.current.injectJavaScript(`
+        try { sessionStorage.removeItem('anchor_from_dm'); } catch(e) {}
+        window.location.href = 'https://www.instagram.com/accounts/activity/';
+        true;
+      `);
     } else if (tab === 'messages') {
-      webViewRef.current.injectJavaScript("window.location.href = 'https://www.instagram.com/direct/inbox/'; true;");
+      webViewRef.current.injectJavaScript(`
+        try { sessionStorage.setItem('anchor_from_dm', 'true'); } catch(e) {}
+        window.location.href = 'https://www.instagram.com/direct/inbox/';
+        true;
+      `);
     } else if (tab === 'profile') {
       const targetUser = loggedInUser || 'nagumoo_001';
       webViewRef.current.injectJavaScript(`
         (function() {
+          try { sessionStorage.removeItem('anchor_from_dm'); } catch(e) {}
           var p = window.location.pathname || '';
           if (p.indexOf('/${targetUser}') !== -1) return;
           window.location.href = 'https://www.instagram.com/${targetUser}/';
@@ -756,12 +1161,13 @@ function MainApp() {
     } else if (tab === 'settings') {
       webViewRef.current.injectJavaScript(`
         (function() {
-          var gear = document.querySelector('svg[aria-label*="Options" i], svg[aria-label*="Settings" i], a[href*="/accounts/settings/"]');
+          try { sessionStorage.removeItem('anchor_from_dm'); } catch(e) {}
+          var gear = document.querySelector('svg[aria-label*="Options" i], svg[aria-label*="Settings" i], a[href*="/settings/"], a[href*="/accounts/settings/"]');
           var gearBtn = gear ? gear.closest('a, button, div[role="button"]') : null;
           if (gearBtn) {
             gearBtn.click();
           } else {
-            window.location.href = 'https://www.instagram.com/accounts/settings/';
+            window.location.href = 'https://www.instagram.com/settings/';
           }
         })();
         true;
@@ -771,6 +1177,17 @@ function MainApp() {
 
   const onShouldStartLoadWithRequest = (request) => {
     const url = request.url || '';
+
+    // Block all native deep-links and app store redirects
+    if (
+      url.startsWith('instagram://') ||
+      url.includes('itunes.apple.com') ||
+      url.includes('apps.apple.com') ||
+      url.includes('play.google.com')
+    ) {
+      return false;
+    }
+
     const isGlobalReels = /^https?:\/\/(?:www\.)?instagram\.com\/reels\/?(?:\?.*)?$/i.test(url);
     const isExplore = /^https?:\/\/(?:www\.)?instagram\.com\/explore\/?(?:\?.*)?$/i.test(url);
 
@@ -792,7 +1209,7 @@ function MainApp() {
         translucent={Platform.OS === 'android'}
       />
 
-      {/* Slim Top Header */}
+      {/* Slim Top Header with Focused Badge */}
       <View
         style={[
           styles.topHeader,
@@ -806,14 +1223,23 @@ function MainApp() {
       >
         <View style={styles.titleGroup}>
           <Text style={[styles.brandTitle, { color: textColor }]}>⚓ Anchor</Text>
-          <View style={[styles.focusedBadge, { backgroundColor: isDark ? 'rgba(52, 199, 89, 0.15)' : 'rgba(52, 199, 89, 0.12)' }]}>
+          <View
+            style={[
+              styles.focusedBadge,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(52, 199, 89, 0.15)'
+                  : 'rgba(52, 199, 89, 0.12)',
+              },
+            ]}
+          >
             <View style={styles.statusDot} />
             <Text style={styles.badgeText}>Focused</Text>
           </View>
         </View>
       </View>
 
-      {/* Native Instagram WebView (Spans full height, seamlessly overlaid by Anchor nav bar) */}
+      {/* Native Instagram WebView (Persistent login session) */}
       <WebView
         ref={webViewRef}
         source={{ uri: 'https://www.instagram.com/direct/inbox/' }}
@@ -821,6 +1247,8 @@ function MainApp() {
         containerStyle={{ backgroundColor: themeBg }}
         domStorageEnabled={true}
         javaScriptEnabled={true}
+        incognito={false}
+        cacheEnabled={true}
         sharedCookiesEnabled={true}
         thirdPartyCookiesEnabled={true}
         originWhitelist={['*']}
@@ -840,6 +1268,9 @@ function MainApp() {
             setCanGoBack(navState.canGoBack);
           }
           const url = navState.url || '';
+          const isThread = url.includes('/direct/t/') || url.includes('/direct/thread/');
+          setIsInChatThread(isThread);
+
           const isGlobalReels = /^https?:\/\/(?:www\.)?instagram\.com\/reels\/?(?:\?.*)?$/i.test(url);
           const isExplore = /^https?:\/\/(?:www\.)?instagram\.com\/explore\/?(?:\?.*)?$/i.test(url);
           if (isGlobalReels || isExplore) {
@@ -847,7 +1278,7 @@ function MainApp() {
             return;
           }
 
-          if (url.includes('/direct/inbox') || url.includes('/direct/t/')) {
+          if (url.includes('/direct/inbox') || url.includes('/direct/t/') || url.includes('/direct/thread/')) {
             setActiveTab('messages');
           } else if (url.includes('/accounts/activity')) {
             setActiveTab('activity');
@@ -866,50 +1297,81 @@ function MainApp() {
         )}
       />
 
-      {/* Anchor's Sole Native Bottom Navigation Bar (Docked solidly over Instagram's bottom position) */}
-      <View
-        style={[
-          styles.standardNavBar,
-          {
-            backgroundColor: isDark ? '#000000' : '#FFFFFF',
-            borderTopColor: isDark ? '#262626' : '#DBDBDB',
-            paddingBottom: Math.max(insets.bottom, 6),
-            height: bottomBarHeight,
-          },
-        ]}
-      >
-        {TABS.map((tab) => {
-          const isActive = activeTab === tab.id;
-          const TabIcon = tab.Icon;
-          const itemColor = isActive
-            ? (isDark ? '#FFFFFF' : '#000000')
-            : (isDark ? '#8E8E93' : '#8E8E93');
-
-          return (
-            <TouchableOpacity
-              key={tab.id}
-              onPress={() => navigateTo(tab.id)}
-              activeOpacity={0.7}
-              style={styles.tabItem}
-            >
-              <View style={styles.iconWrapper}>
-                <TabIcon active={isActive} color={itemColor} />
-              </View>
-              <Text
+      {/* Modern Floating Glassmorphism Bottom Navigation Bar */}
+      {!isInChatThread && (
+        <View style={styles.floatingNavWrapper} pointerEvents="box-none">
+          <View
+            onLayout={(e) => setNavBarWidth(e.nativeEvent.layout.width)}
+            style={[
+              styles.glassmorphicNavBar,
+              {
+                backgroundColor: isDark ? 'rgba(18, 18, 18, 0.65)' : 'rgba(255, 255, 255, 0.82)',
+                borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.1)',
+              },
+            ]}
+          >
+            {/* Smooth animated active pill indicator */}
+            {navBarWidth > 0 && (
+              <Animated.View
+                pointerEvents="none"
                 style={[
-                  styles.tabLabel,
+                  styles.activePillIndicator,
                   {
-                    color: itemColor,
-                    fontWeight: isActive ? '700' : '500',
+                    width: (navBarWidth - 16) / TABS.length,
+                    left: tabIndexAnim.interpolate({
+                      inputRange: [0, 1, 2, 3],
+                      outputRange: [
+                        8,
+                        8 + (navBarWidth - 16) / 4,
+                        8 + ((navBarWidth - 16) / 4) * 2,
+                        8 + ((navBarWidth - 16) / 4) * 3,
+                      ],
+                    }),
+                    backgroundColor: isDark
+                      ? 'rgba(255, 255, 255, 0.16)'
+                      : 'rgba(0, 0, 0, 0.08)',
+                    borderColor: isDark
+                      ? 'rgba(255, 255, 255, 0.18)'
+                      : 'rgba(0, 0, 0, 0.06)',
                   },
                 ]}
-              >
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+              />
+            )}
+
+            {TABS.map((tab) => {
+              const isActive = activeTab === tab.id;
+              const TabIcon = tab.Icon;
+              const activeTextColor = isDark ? '#FFFFFF' : '#000000';
+              const inactiveTextColor = isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.5)';
+              const iconColor = isActive ? activeTextColor : inactiveTextColor;
+
+              return (
+                <TouchableOpacity
+                  key={tab.id}
+                  onPress={() => navigateTo(tab.id)}
+                  activeOpacity={0.7}
+                  style={styles.tabItem}
+                >
+                  <View style={styles.iconWrapper}>
+                    <TabIcon active={isActive} color={iconColor} />
+                  </View>
+                  <Text
+                    style={[
+                      styles.tabLabel,
+                      {
+                        color: iconColor,
+                        fontWeight: isActive ? '700' : '500',
+                      },
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -1007,29 +1469,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 99,
   },
-  standardNavBar: {
+  floatingNavWrapper: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: 20,
+    left: 20,
+    right: 20,
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  glassmorphicNavBar: {
+    position: 'relative',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    borderTopWidth: 0.5,
+    justifyContent: 'space-between',
     width: '100%',
-    zIndex: 999,
-    elevation: 20,
+    borderRadius: 30,
+    borderWidth: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.37,
+    shadowRadius: 32,
+    elevation: 12,
+  },
+  activePillIndicator: {
+    position: 'absolute',
+    top: 6,
+    bottom: 6,
+    borderRadius: 22,
+    borderWidth: 1,
+    zIndex: 1,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    borderRadius: 20,
+    zIndex: 2,
   },
   iconWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
-    height: 26,
+    height: 24,
   },
   tabLabel: {
     fontSize: 10,

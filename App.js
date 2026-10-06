@@ -29,6 +29,49 @@ const getInitJS = (isDark) => `
       document.cookie = "theme=" + themeMode + "; path=/; max-age=31536000";
     } catch(e) {}
 
+    // Global CSS Injection with Wildcard Attributes directly into document.documentElement before body loads
+    var injectPreloadCSS = function() {
+      try {
+        var root = document.documentElement || document.head;
+        if (!document.getElementById('anchor-preload-nav-shield') && root) {
+          var preStyle = document.createElement('style');
+          preStyle.id = 'anchor-preload-nav-shield';
+          preStyle.textContent = [
+            '[style*="position: fixed"][style*="bottom: 0"]:not(:has(textarea)):not(:has(input))',
+            '[style*="position:fixed"][style*="bottom:0"]:not(:has(textarea)):not(:has(input))',
+            '[style*="position: fixed"][style*="bottom:0"]:not(:has(textarea)):not(:has(input))',
+            '[style*="position:fixed"][style*="bottom: 0"]:not(:has(textarea)):not(:has(input))',
+            '[style*="bottom: 0"]:not(:has(textarea)):not(:has(input))',
+            '[style*="bottom:0"]:not(:has(textarea)):not(:has(input))',
+            '[role="navigation"]:not(header *):not(:has(textarea)):not(:has(input))',
+            'nav:not(header *):not(:has(textarea)):not(:has(input))',
+            'footer:not(:has(textarea)):not(:has(input)):not(:has(div[contenteditable="true"])):not(:has(form))',
+            'div:has(> a[href*="/direct/"]):not(header *):not(:has(textarea)):not(:has(input))',
+            'div:has(> a[href*="/reels/"])',
+            'section > div:has(a[href*="/reels/"])',
+            'section > div:has(a[href*="/direct/inbox/"])',
+            'section > div:has(a[href="/"])',
+            'div._aawp, div._aawq, div._ac8f',
+            'div[data-testid="bottom-nav"]',
+            'div[data-testid="mobile-nav-bar"]',
+            'div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Home" i])',
+            'div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Reels" i])',
+            'div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Search" i])',
+            'div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Profile" i])',
+            'div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Home" i])',
+            'div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Reels" i])',
+            'div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Search" i])',
+            'div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Profile" i])'
+          ].join(', ') + ' { display: none !important; opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; height: 0 !important; min-height: 0 !important; position: absolute !important; top: -9999px !important; }';
+          root.insertBefore(preStyle, root.firstChild || null);
+        }
+      } catch(e) {}
+    };
+    injectPreloadCSS();
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', injectPreloadCSS);
+    }
+
     // Mock matchMedia so Meta/Comet initializes native dark components
     try {
       var origMatch = window.matchMedia;
@@ -290,17 +333,62 @@ const getInjectedJS = (isDark) => `
           pointer-events: none !important;
         }
 
-        /* Hide Instagram's Original Bottom Navigation Bar only outside direct messages */
-        body:not([data-in-direct="true"]) footer:not(:has(textarea)):not(:has(input)):not(:has(div[contenteditable="true"])):not(:has(form)),
-        body:not([data-in-direct="true"]) nav:not(header *):not(:has(textarea)):not(:has(input)),
-        body:not([data-in-direct="true"]) div[role="navigation"]:not(header *):not(:has(textarea)):not(:has(input)) {
+        /* Clean Top Header: Hide floating gear icon overlays and duplicate header settings buttons */
+        div[style*="fixed"][style*="top:"]:has(svg[aria-label*="Options" i]),
+        div[style*="fixed"][style*="top:"]:has(svg[aria-label*="Settings" i]),
+        div[style*="fixed"][style*="top:"]:has(svg[aria-label*="gear" i]),
+        div[style*="sticky"][style*="top:"]:has(svg[aria-label*="Options" i]),
+        div[style*="sticky"][style*="top:"]:has(svg[aria-label*="Settings" i]),
+        div[style*="sticky"][style*="top:"]:has(svg[aria-label*="gear" i]),
+        div[style*="top: 0"]:has(svg[aria-label*="Options" i]),
+        div[style*="top: 0"]:has(svg[aria-label*="Settings" i]),
+        div[style*="top:0"]:has(svg[aria-label*="Options" i]),
+        div[style*="top:0"]:has(svg[aria-label*="Settings" i]) {
           display: none !important;
           visibility: hidden !important;
           opacity: 0 !important;
-          height: 0px !important;
-          max-height: 0px !important;
-          overflow: hidden !important;
           pointer-events: none !important;
+        }
+
+        /* Fallback CSS Suppression Layer: Permanently Eradicate Instagram's Native Bottom Navigation Bar */
+        div[role="navigation"]:not(header *):not(:has(textarea)):not(:has(input)),
+        nav[role="navigation"]:not(header *),
+        nav:not(header *):not(:has(textarea)):not(:has(input)),
+        footer:not(:has(textarea)):not(:has(input)):not(:has(div[contenteditable="true"])):not(:has(form)),
+        footer[role="contentinfo"],
+        section > div:has(a[href*="/reels/"]),
+        section > div:has(a[href*="/direct/inbox/"]),
+        section > div:has(a[href="/"]),
+        div._aawp,
+        div._aawq,
+        div._ac8f,
+        div[data-testid="bottom-nav"],
+        div[data-testid="mobile-nav-bar"],
+        div[style*="fixed"][style*="bottom: 0"]:not(:has(textarea)):not(:has(input)),
+        div[style*="fixed"][style*="bottom:0"]:not(:has(textarea)):not(:has(input)),
+        div[style*="position: fixed"][style*="bottom"]:not(:has(textarea)):not(:has(input)),
+        div[style*="position:fixed"][style*="bottom"]:not(:has(textarea)):not(:has(input)),
+        div[style*="position: absolute"][style*="bottom: 0"]:not(:has(textarea)):not(:has(input)),
+        div[style*="position:absolute"][style*="bottom:0"]:not(:has(textarea)):not(:has(input)),
+        div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Home" i]),
+        div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Reels" i]),
+        div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Search" i]),
+        div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Explore" i]),
+        div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Profile" i]),
+        div[style*="fixed"][style*="bottom"]:has(img[alt*="profile" i]),
+        div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Home" i]),
+        div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Reels" i]),
+        div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Search" i]),
+        div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Explore" i]),
+        div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Profile" i]),
+        div[style*="sticky"][style*="bottom"]:has(img[alt*="profile" i]) {
+          display: none !important;
+          opacity: 0 !important;
+          visibility: hidden !important;
+          height: 0 !important;
+          pointer-events: none !important;
+          position: absolute !important;
+          top: -9999px !important;
         }
 
         /* Protect and guarantee Direct Message Composer is visible and usable */
@@ -362,13 +450,18 @@ const getInjectedJS = (isDark) => `
           overflow: hidden !important;
         }
 
-        /* Safe 95px bottom scrolling clearance on main container EXCEPT when inside chat thread */
+        /* Safe 95px bottom scrolling clearance on main container and body EXCEPT when inside chat thread */
         body:not([data-in-chat="true"]) main[role="main"],
-        body:not([data-in-chat="true"]) main {
+        body:not([data-in-chat="true"]) main,
+        body:not([data-in-chat="true"]) #react-root,
+        body:not([data-in-chat="true"]) {
           padding-bottom: 95px !important;
+          box-sizing: border-box !important;
         }
         body[data-in-chat="true"] main[role="main"],
-        body[data-in-chat="true"] main {
+        body[data-in-chat="true"] main,
+        body[data-in-chat="true"] #react-root,
+        body[data-in-chat="true"] {
           padding-bottom: 0px !important;
         }
 
@@ -394,41 +487,107 @@ const getInjectedJS = (isDark) => `
 
     // 4. PRECISE ERADICATION OF INSTAGRAM'S ORIGINAL BOTTOM BAR
     function eradicateInstagramBottomBar() {
-      var isDirectInbox = (window.location.pathname || '').indexOf('/direct') !== -1;
+      var pathname = (window.location.pathname || '').toLowerCase();
+      var isChatThread = pathname.indexOf('/direct/t/') !== -1 || pathname.indexOf('/direct/thread/') !== -1;
 
-      // CRITICAL: If we are in Direct (inbox or inside a chat thread), DO NOT TOUCH anything!
-      // This protects the message composer, chat thread, and keyboard inputs completely.
-      if (isDirectInbox) return;
+      // CRITICAL: Only skip when directly inside an active chat message thread with an active text composer!
+      // On all other pages (including profile, inbox list, activity, search, settings), fully eradicate the bottom bar!
+      if (isChatThread) return;
 
       var winH = window.innerHeight || 800;
 
-      // Direct hide footer and nav on non-direct pages (only if it has no inputs)
-      var footers = document.querySelectorAll('footer, nav:not(header *), div[role="navigation"]:not(header *)');
-      for (var f = 0; f < footers.length; f++) {
-        var foot = footers[f];
-        if (foot.querySelector('textarea, input, [contenteditable="true"], form')) continue;
-        foot.style.setProperty('display', 'none', 'important');
-        foot.style.setProperty('visibility', 'hidden', 'important');
-        foot.style.setProperty('height', '0px', 'important');
-        foot.style.setProperty('pointer-events', 'none', 'important');
+      // Safe helper to remove or detach an element from the DOM
+      var destroyElement = function(element) {
+        if (!element) return;
+        try {
+          if (element.remove) {
+            element.remove();
+          } else if (element.parentNode) {
+            element.parentNode.removeChild(element);
+          }
+        } catch(err) {
+          element.style.setProperty('display', 'none', 'important');
+          element.style.setProperty('opacity', '0', 'important');
+          element.style.setProperty('visibility', 'hidden', 'important');
+          element.style.setProperty('height', '0px', 'important');
+          element.style.setProperty('position', 'absolute', 'important');
+          element.style.setProperty('top', '-9999px', 'important');
+        }
+      };
+
+      // Target all specified native bottom navigation selectors
+      var navSelectors = [
+        'div[role="navigation"]:not(header *)',
+        'nav[role="navigation"]:not(header *)',
+        'nav:not(header *)',
+        'footer',
+        'section > div:has(a[href*="/reels/"])',
+        'section > div:has(a[href*="/direct/inbox/"])',
+        'div._aawp',
+        'div._aawq',
+        'div._ac8f',
+        'div[data-testid="bottom-nav"]',
+        'div[data-testid="mobile-nav-bar"]',
+        'div[style*="bottom: 0"]',
+        'div[style*="bottom:0"]',
+        'div[style*="bottom: 0px"]',
+        'div[style*="bottom:0px"]'
+      ].join(', ');
+
+      var targets = document.querySelectorAll(navSelectors);
+      // Direct destroy target elements
+      for (var f = 0; f < targets.length; f++) {
+        var el = targets[f];
+        if (el.querySelector && el.querySelector('textarea, input, [contenteditable="true"], form')) continue;
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('opacity', '0', 'important');
+        el.style.setProperty('visibility', 'hidden', 'important');
+        el.style.setProperty('pointer-events', 'none', 'important');
+        el.style.setProperty('height', '0px', 'important');
+        el.style.setProperty('position', 'absolute', 'important');
+        el.style.setProperty('top', '-9999px', 'important');
+        destroyElement(el);
       }
 
-      // Method 1: Target Home link icon in the bottom bar (never top header)
-      var homeLinks = document.querySelectorAll('a[href="/"], a[href="/?variant=home"], svg[aria-label*="Home" i]');
-      for (var h = 0; h < homeLinks.length; h++) {
-        var hl = homeLinks[h];
-        var hlR = hl.getBoundingClientRect();
-        if (hlR.top > winH - 120 && hlR.top > 200) {
-          hl.style.setProperty('display', 'none', 'important');
-          var curr = hl.parentElement;
+      // Method 1: Find all bottom bar navigation items (Home, Search, Explore, Reels, Direct/Inbox, Profile)
+      var bottomIcons = document.querySelectorAll([
+        'svg[aria-label*="Home" i]',
+        'svg[aria-label*="Search" i]',
+        'svg[aria-label*="Explore" i]',
+        'svg[aria-label*="Reels" i]',
+        'svg[aria-label*="Clips" i]',
+        'svg[aria-label*="Messenger" i]',
+        'svg[aria-label*="Direct" i]',
+        'svg[aria-label*="Profile" i]',
+        'a[href="/"]',
+        'a[href="/?variant=home"]',
+        'a[href*="/explore/"]',
+        'a[href*="/reels/"]',
+        'a[href*="/direct/inbox/"]',
+        'img[alt*="profile picture" i]',
+        'img[alt*="profile" i]'
+      ].join(', '));
+
+      for (var h = 0; h < bottomIcons.length; h++) {
+        var icon = bottomIcons[h];
+        var iconR = icon.getBoundingClientRect();
+        // If the icon is in the bottom 160px of the viewport (distinct from top header at top < 120px)
+        if (iconR.top > winH - 160 && iconR.top > 120) {
+          icon.style.setProperty('display', 'none', 'important');
+          var curr = icon.parentElement;
           while (curr && curr !== document.body && curr !== document.documentElement && curr.tagName !== 'MAIN' && curr.id !== 'react-root') {
+            if (curr.querySelector && curr.querySelector('textarea, input, [contenteditable="true"], form')) break;
             var st = window.getComputedStyle(curr);
             var r = curr.getBoundingClientRect();
-            if ((st.position === 'fixed' || st.position === 'sticky') && r.top > winH - 120) {
+            if ((st.position === 'fixed' || st.position === 'sticky' || st.position === 'absolute' || curr.tagName === 'NAV' || curr.tagName === 'FOOTER' || curr.getAttribute('role') === 'navigation') && r.top > winH - 160) {
               curr.style.setProperty('display', 'none', 'important');
+              curr.style.setProperty('opacity', '0', 'important');
               curr.style.setProperty('visibility', 'hidden', 'important');
-              curr.style.setProperty('height', '0px', 'important');
               curr.style.setProperty('pointer-events', 'none', 'important');
+              curr.style.setProperty('height', '0px', 'important');
+              curr.style.setProperty('position', 'absolute', 'important');
+              curr.style.setProperty('top', '-9999px', 'important');
+              destroyElement(curr);
               break;
             }
             curr = curr.parentElement;
@@ -436,31 +595,42 @@ const getInjectedJS = (isDark) => `
         }
       }
 
-      // Method 2: Target bottom avatar icon and walk up
-      var avatars = document.querySelectorAll('img[alt*="profile picture" i], img[alt*="profile" i]');
-      for (var i = 0; i < avatars.length; i++) {
-        var img = avatars[i];
-        var imgR = img.getBoundingClientRect();
-        // The bottom bar avatar is tiny (< 36px) and located in the bottom 120px
-        if (imgR.height > 15 && imgR.height < 48 && imgR.top > winH - 120) {
-          var cur = img.parentElement;
-          while (cur && cur !== document.body && cur !== document.documentElement && cur.tagName !== 'MAIN' && cur.id !== 'react-root') {
-            var comp = window.getComputedStyle(cur);
-            var curR = cur.getBoundingClientRect();
-            if ((comp.position === 'fixed' || comp.position === 'sticky') && curR.top > winH - 120) {
-              cur.style.setProperty('display', 'none', 'important');
-              cur.style.setProperty('visibility', 'hidden', 'important');
-              cur.style.setProperty('height', '0px', 'important');
-              cur.style.setProperty('pointer-events', 'none', 'important');
-              break;
-            }
-            cur = cur.parentElement;
+      // Method 2: Scan all fixed/sticky/absolute elements positioned at the bottom of the viewport (< 140px high)
+      var allFixed = document.querySelectorAll('div, nav, footer, section');
+      for (var d = 0; d < allFixed.length; d++) {
+        var node = allFixed[d];
+        if (node.querySelector && node.querySelector('textarea, input, [contenteditable="true"], form')) continue;
+        var style = window.getComputedStyle(node);
+        if (style.position === 'fixed' || style.position === 'sticky') {
+          var rect = node.getBoundingClientRect();
+          if (rect.top > winH - 140 && rect.height > 0 && rect.height < 140) {
+            node.style.setProperty('display', 'none', 'important');
+            node.style.setProperty('opacity', '0', 'important');
+            node.style.setProperty('visibility', 'hidden', 'important');
+            node.style.setProperty('pointer-events', 'none', 'important');
+            node.style.setProperty('height', '0px', 'important');
+            node.style.setProperty('position', 'absolute', 'important');
+            node.style.setProperty('top', '-9999px', 'important');
+            destroyElement(node);
           }
         }
       }
     }
     eradicateInstagramBottomBar();
-    setInterval(eradicateInstagramBottomBar, 300);
+    setInterval(eradicateInstagramBottomBar, 100);
+
+    // MutationObserver: Instantly re-apply suppression on dynamic Single Page Application (SPA) DOM updates
+    try {
+      var navObserver = new MutationObserver(function() {
+        eradicateInstagramBottomBar();
+      });
+      navObserver.observe(document.documentElement || document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class', 'style']
+      });
+    } catch(e) {}
 
     // 5. Active banner purger: Permanently removes all "Use the app", "Open the App" & App Store prompts
     function purgeAppPrompts() {
@@ -964,6 +1134,7 @@ const getInjectedJS = (isDark) => `
 
       if (currentPath !== lastRecordedPath) {
         lastRecordedPath = currentPath;
+        try { eradicateInstagramBottomBar(); } catch(e) {}
         if (window.ReactNativeWebView) {
           window.ReactNativeWebView.postMessage(JSON.stringify({
             type: 'ROUTE_CHANGE',
@@ -995,13 +1166,7 @@ const getInjectedJS = (isDark) => `
         }
         window.location.href = 'https://www.instagram.com/accounts/edit/';
       } else if (destination === 'settings') {
-        var gear = document.querySelector('svg[aria-label*="Options" i], svg[aria-label*="Settings" i], a[href*="/settings/"], a[href*="/accounts/settings/"]');
-        var gearBtn = gear ? gear.closest('a, button, div[role="button"]') : null;
-        if (gearBtn) {
-          gearBtn.click();
-        } else {
-          window.location.href = 'https://www.instagram.com/settings/';
-        }
+        window.location.href = 'https://www.instagram.com/accounts/privacy_and_security/';
       }
     };
   })();
@@ -1122,7 +1287,7 @@ function MainApp() {
           setActiveTab('messages');
         } else if (p.indexOf('/accounts/activity') !== -1) {
           setActiveTab('activity');
-        } else if (p.indexOf('/accounts/settings') !== -1 || p.indexOf('/accounts/edit') !== -1) {
+        } else if (p.indexOf('/accounts/settings') !== -1 || p.indexOf('/accounts/edit') !== -1 || p.indexOf('/accounts/privacy_and_security') !== -1) {
           setActiveTab('settings');
         } else if (loggedInUser && p.indexOf(`/${loggedInUser.toLowerCase()}`) !== -1) {
           setActiveTab('profile');
@@ -1162,13 +1327,7 @@ function MainApp() {
       webViewRef.current.injectJavaScript(`
         (function() {
           try { sessionStorage.removeItem('anchor_from_dm'); } catch(e) {}
-          var gear = document.querySelector('svg[aria-label*="Options" i], svg[aria-label*="Settings" i], a[href*="/settings/"], a[href*="/accounts/settings/"]');
-          var gearBtn = gear ? gear.closest('a, button, div[role="button"]') : null;
-          if (gearBtn) {
-            gearBtn.click();
-          } else {
-            window.location.href = 'https://www.instagram.com/settings/';
-          }
+          window.location.href = 'https://www.instagram.com/accounts/privacy_and_security/';
         })();
         true;
       `);
@@ -1282,11 +1441,15 @@ function MainApp() {
             setActiveTab('messages');
           } else if (url.includes('/accounts/activity')) {
             setActiveTab('activity');
-          } else if (url.includes('/accounts/settings') || url.includes('/accounts/edit')) {
+          } else if (url.includes('/accounts/settings') || url.includes('/accounts/edit') || url.includes('/accounts/privacy_and_security')) {
             setActiveTab('settings');
           } else if (loggedInUser && url.includes(`/${loggedInUser}`)) {
             setActiveTab('profile');
           }
+          webViewRef.current?.injectJavaScript(getInjectedJS(isDark));
+        }}
+        onLoadEnd={() => {
+          webViewRef.current?.injectJavaScript(getInjectedJS(isDark));
         }}
         onMessage={onMessage}
         startInLoadingState={true}
@@ -1305,7 +1468,7 @@ function MainApp() {
             style={[
               styles.glassmorphicNavBar,
               {
-                backgroundColor: isDark ? 'rgba(18, 18, 18, 0.65)' : 'rgba(255, 255, 255, 0.82)',
+                backgroundColor: isDark ? 'rgba(18, 18, 18, 0.75)' : 'rgba(255, 255, 255, 0.85)',
                 borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.1)',
               },
             ]}
@@ -1475,7 +1638,7 @@ const styles = StyleSheet.create({
     left: 20,
     right: 20,
     alignItems: 'center',
-    zIndex: 999,
+    zIndex: 99999,
   },
   glassmorphicNavBar: {
     position: 'relative',

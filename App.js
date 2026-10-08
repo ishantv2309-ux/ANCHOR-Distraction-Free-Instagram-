@@ -16,20 +16,55 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { WebView } from 'react-native-webview';
 import Svg, { Path, Circle } from 'react-native-svg';
 
-const USER_AGENT = Platform.OS === 'ios'
-  ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
-  : 'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
+const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 // Lightweight pre-load script: syncs theme cookies, mocks matchMedia, and sets early gesture lock
 const getInitJS = (isDark) => `
   (function() {
+    // 0. Native Mobile Viewport Configuration
+    try {
+      window.hasNativeApp = true;
+      window.__hasNativeApp = true;
+      navigator.hasNativeApp = true;
+
+      // Intercept and swallow deep-link navigation schemes (instagram://, app store)
+      var isAppStoreOrDeepLink = function(url) {
+        if (!url || typeof url !== 'string') return false;
+        var u = url.toLowerCase();
+        return u.indexOf('instagram://') === 0 ||
+               u.indexOf('itunes.apple.com') !== -1 ||
+               u.indexOf('apps.apple.com') !== -1 ||
+               u.indexOf('play.google.com') !== -1 ||
+               u.indexOf('app.link') !== -1;
+      };
+
+      var origAssign = window.location.assign;
+      window.location.assign = function(url) {
+        if (isAppStoreOrDeepLink(url)) return;
+        return origAssign ? origAssign.apply(this, arguments) : null;
+      };
+
+      var origReplace = window.location.replace;
+      window.location.replace = function(url) {
+        if (isAppStoreOrDeepLink(url)) return;
+        return origReplace ? origReplace.apply(this, arguments) : null;
+      };
+
+      // Override window.open to block dynamic app deep-link modals or mobile download popups
+      var origOpen = window.open;
+      window.open = function(url) {
+        if (isAppStoreOrDeepLink(url)) return null;
+        return origOpen ? origOpen.apply(this, arguments) : null;
+      };
+    } catch(e) {}
+
     var themeMode = ${isDark ? "'dark'" : "'light'"};
     try {
       document.cookie = "theme=" + themeMode + "; path=/; max-age=31536000; domain=.instagram.com";
       document.cookie = "theme=" + themeMode + "; path=/; max-age=31536000";
     } catch(e) {}
 
-    // Global CSS Injection with Wildcard Attributes directly into document.documentElement before body loads
+    // Global CSS Injection directly into document.documentElement before body loads
     var injectPreloadCSS = function() {
       try {
         var root = document.documentElement || document.head;
@@ -39,34 +74,46 @@ const getInitJS = (isDark) => `
           var preStyle = document.createElement('style');
           preStyle.id = 'anchor-preload-nav-shield';
           preStyle.textContent = [
-            '[style*="position: fixed"][style*="bottom"]:not(:has(textarea)):not(:has(input))',
-            '[style*="position:fixed"][style*="bottom"]:not(:has(textarea)):not(:has(input))',
-            '[style*="position: sticky"][style*="bottom"]:not(:has(textarea)):not(:has(input))',
-            '[style*="position:sticky"][style*="bottom"]:not(:has(textarea)):not(:has(input))',
-            '[style*="bottom: 0"]:not(:has(textarea)):not(:has(input))',
-            '[style*="bottom:0"]:not(:has(textarea)):not(:has(input))',
-            '[style*="bottom: 0px"]:not(:has(textarea)):not(:has(input))',
-            '[style*="bottom:0px"]:not(:has(textarea)):not(:has(input))',
-            '[role="navigation"]:not(header *):not(:has(textarea)):not(:has(input))',
-            'nav:not(header *):not(:has(textarea)):not(:has(input))',
-            'footer:not(:has(textarea)):not(:has(input)):not(:has(div[contenteditable="true"])):not(:has(form))',
-            'div:has(> a[href*="/direct/"]):not(header *):not(:has(textarea)):not(:has(input))',
-            'div:has(> a[href*="/reels/"])',
-            'section > div:has(a[href*="/reels/"])',
-            'section > div:has(a[href*="/direct/inbox/"])',
-            'section > div:has(a[href="/"])',
+            'footer:not(:has(textarea)):not(:has(input)):not(:has([contenteditable="true"])):not(:has(form))',
+            'nav:not(header *)',
+            'div[role="navigation"]:not(header *)',
+            'nav._a3gq',
+            'section > div:has(> a[href*="/reels/"])',
             'div._aawp, div._aawq, div._ac8f',
             'div[data-testid="bottom-nav"]',
             'div[data-testid="mobile-nav-bar"]',
             'div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Home" i])',
             'div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Reels" i])',
             'div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Search" i])',
-            'div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Profile" i])',
+            'div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Explore" i])',
             'div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Home" i])',
             'div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Reels" i])',
             'div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Search" i])',
-            'div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Profile" i])'
-          ].join(', ') + ' { display: none !important; opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; height: 0 !important; min-height: 0 !important; position: absolute !important; top: -9999px !important; }';
+            'div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Explore" i])',
+            // Universal and high-priority banner suppression
+            'a[href*="app" i]:not(main a):not(nav a):not(header a)',
+            'div[class*="banner" i]:not(header):not(form)',
+            'div:has(> a[href*="instagram.com/about"])',
+            '[role="banner"]:not(header):not(form)',
+            'div:has(> a[href*="instagram://"])',
+            'a[href*="app.link"]',
+            'a[href*="instagram://"]',
+            'a[href*="itunes.apple.com"]',
+            'a[href*="apps.apple.com"]',
+            'a[href*="play.google.com"]',
+            '.smartbanner',
+            '[class*="smartbanner" i]',
+            '[class*="smart-banner" i]',
+            '[class*="app-banner" i]',
+            '[class*="app-link" i]',
+            '[class*="app_link" i]',
+            'footer + div:not(:has(textarea)):not(:has(input)):not(:has([contenteditable="true"])):not(:has(form))',
+            'div[data-testid*="app-upsell"]',
+            'div[data-testid*="smart-banner"]',
+            'div[data-testid*="open-in-app"]',
+            'div[data-testid*="get-app"]',
+            'div[data-testid*="install-app"]'
+          ].join(', ') + ' { display: none !important; opacity: 0 !important; visibility: hidden !important; height: 0 !important; pointer-events: none !important; position: absolute !important; top: -9999px !important; }';
           root.insertBefore(preStyle, root.firstChild || null);
         }
       } catch(e) {}
@@ -166,12 +213,29 @@ const getInjectedJS = (isDark) => `
       document.cookie = "theme=" + themeMode + "; path=/; max-age=31536000";
     } catch(e) {}
 
+    // Safe DOM Readiness Wrapper
+    var onDOMReady = function(fn) {
+      if (!fn) return;
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        try { fn(); } catch(e) {}
+      } else {
+        document.addEventListener('DOMContentLoaded', function() {
+          try { fn(); } catch(e) {}
+        }, { once: true });
+        window.addEventListener('load', function() {
+          try { fn(); } catch(e) {}
+        }, { once: true });
+      }
+    };
+
     // 2. Set native Instagram theme class and color scheme
-    if (document.documentElement) {
-      document.documentElement.classList.remove('__ig-dark-mode', '__ig-light-mode', 'dark', 'light');
-      document.documentElement.classList.add(themeClass, themeMode);
-      document.documentElement.style.setProperty('color-scheme', themeMode);
-    }
+    try {
+      if (document.documentElement) {
+        document.documentElement.classList.remove('__ig-dark-mode', '__ig-light-mode', 'dark', 'light');
+        document.documentElement.classList.add(themeClass, themeMode);
+        document.documentElement.style.setProperty('color-scheme', themeMode);
+      }
+    } catch(e) {}
 
     // 3. Inject safe, pristine CSS overrides
     var styleId = 'anchor-native-shield';
@@ -355,21 +419,11 @@ const getInjectedJS = (isDark) => `
           pointer-events: none !important;
         }
 
-        /* Global CSS with Wildcard Attributes: Permanently Eradicate Instagram's Native Bottom Navigation Bar */
-        [style*="position: fixed"][style*="bottom: 0"]:not(:has(textarea)):not(:has(input)),
-        [style*="position:fixed"][style*="bottom:0"]:not(:has(textarea)):not(:has(input)),
-        [style*="position: fixed"][style*="bottom:0"]:not(:has(textarea)):not(:has(input)),
-        [style*="position:fixed"][style*="bottom: 0"]:not(:has(textarea)):not(:has(input)),
-        [style*="bottom: 0"]:not(:has(textarea)):not(:has(input)),
-        [style*="bottom:0"]:not(:has(textarea)):not(:has(input)),
-        [role="navigation"]:not(header *):not(:has(textarea)):not(:has(input)),
-        nav:not(header *):not(:has(textarea)):not(:has(input)),
-        footer:not(:has(textarea)):not(:has(input)):not(:has(div[contenteditable="true"])):not(:has(form)),
-        div:has(> a[href*="/direct/"]):not(header *):not(:has(textarea)):not(:has(input)),
-        div:has(> a[href*="/reels/"]),
-        section > div:has(a[href*="/reels/"]),
-        section > div:has(a[href*="/direct/inbox/"]),
-        section > div:has(a[href="/"]),
+        /* Global CSS: Cleanly Hide Instagram's Native Bottom Navigation Bar */
+        div[role="navigation"],
+        nav[role="navigation"]:not(header *),
+        nav._a3gq,
+        footer:not(:has(textarea)):not(:has(input)):not(:has([contenteditable="true"])):not(:has(form)),
         div._aawp,
         div._aawq,
         div._ac8f,
@@ -378,18 +432,21 @@ const getInjectedJS = (isDark) => `
         div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Home" i]),
         div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Reels" i]),
         div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Search" i]),
-        div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Profile" i]),
+        div[style*="fixed"][style*="bottom"]:has(svg[aria-label*="Explore" i]),
         div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Home" i]),
         div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Reels" i]),
         div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Search" i]),
-        div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Profile" i]) {
+        div[style*="sticky"][style*="bottom"]:has(svg[aria-label*="Explore" i]) {
           display: none !important;
+          visibility: hidden !important;
           opacity: 0 !important;
           pointer-events: none !important;
-          visibility: hidden !important;
           height: 0 !important;
           min-height: 0 !important;
+          max-height: 0 !important;
+          overflow: hidden !important;
           position: absolute !important;
+          transform: scale(0) !important;
           top: -9999px !important;
         }
 
@@ -411,13 +468,18 @@ const getInjectedJS = (isDark) => `
         }
 
         /* Permanently Hide all "Use the App", "Open the App", smart banners, and deep-link prompts */
+        a[href*="app" i]:not(main a):not(nav a):not(header a),
+        div[class*="banner" i]:not([role="region"]):not(form):not(:has(textarea)):not(:has(input)),
+        div:has(> a[href*="instagram.com/about"]),
+        [role="banner"]:not(header):not([role="region"]):not(form),
+        div:has(> a[href*="instagram://"]),
+        a[href*="app.link"],
         .smartbanner,
         [class*="smartbanner" i],
         [class*="smart-banner" i],
         [class*="app-banner" i],
         [class*="app-link" i],
         [class*="app_link" i],
-        [class*="banner" i]:not([role="region"]):not(form):not(:has(textarea)):not(:has(input)),
         [id*="smartbanner" i],
         [id*="app-banner" i],
         [id*="app-link" i],
@@ -444,12 +506,12 @@ const getInjectedJS = (isDark) => `
         div[style*="position: sticky"][style*="bottom"]:has(a[href*="apple.com"]),
         div[style*="position: sticky"][style*="bottom"]:has(a[href*="google.com"]) {
           display: none !important;
-          visibility: hidden !important;
           opacity: 0 !important;
+          visibility: hidden !important;
+          height: 0 !important;
           pointer-events: none !important;
-          height: 0px !important;
-          max-height: 0px !important;
-          overflow: hidden !important;
+          position: absolute !important;
+          top: -9999px !important;
         }
 
         /* Safe 90px bottom scrolling clearance on main container and body EXCEPT when inside chat thread */
@@ -516,25 +578,16 @@ const getInjectedJS = (isDark) => `
         } catch(err) {}
       };
 
-      // 1. Universal Selector check
+      // 1. Universal Selector check for Instagram's native bottom nav
       var navSelectors = [
-        'div[role="navigation"]:not(header *)',
+        'nav._a3gq',
         'nav[role="navigation"]:not(header *)',
-        'nav:not(header *)',
-        'footer',
-        'div:has(> a[href*="/direct/"]):not(header *)',
-        'div:has(> a[href*="/reels/"])',
-        'section > div:has(a[href*="/reels/"])',
-        'section > div:has(a[href*="/direct/inbox/"])',
+        'div[role="navigation"]:not(header *)',
         'div._aawp',
         'div._aawq',
         'div._ac8f',
         'div[data-testid="bottom-nav"]',
-        'div[data-testid="mobile-nav-bar"]',
-        'div[style*="bottom: 0"]',
-        'div[style*="bottom:0"]',
-        'div[style*="bottom: 0px"]',
-        'div[style*="bottom:0px"]'
+        'div[data-testid="mobile-nav-bar"]'
       ].join(', ');
 
       try {
@@ -546,54 +599,28 @@ const getInjectedJS = (isDark) => `
         }
       } catch(e) {}
 
-      // 2. Dynamic Coordinate & Position Interception (Loop through all div, nav, footer)
-      try {
-        var candidates = document.querySelectorAll('div, nav, footer');
-        for (var i = 0; i < candidates.length; i++) {
-          var item = candidates[i];
-          if (item.querySelector && item.querySelector('textarea, input, [contenteditable="true"], form')) continue;
-          if (item.tagName === 'MAIN' || item.id === 'react-root') continue;
-
-          var st = window.getComputedStyle(item);
-          var isPos = st.position === 'fixed' || st.position === 'sticky' || st.position === 'absolute';
-          if (!isPos && item.tagName !== 'NAV' && item.tagName !== 'FOOTER') continue;
-
-          var rect = item.getBoundingClientRect();
-          // Check if element is fixed or sticky at bottom of viewport
-          if (rect.bottom >= winH - 80 && rect.top > 120 && rect.height > 0 && rect.height < 120) {
-            destroyElement(item);
-          }
-        }
-      } catch(e) {}
-
-      // 3. Bottom nav icons coordinate tracking
+      // 2. Bottom nav icons coordinate tracking (Home, Search, Explore, Reels)
       try {
         var bottomIcons = document.querySelectorAll([
           'svg[aria-label*="Home" i]',
           'svg[aria-label*="Search" i]',
           'svg[aria-label*="Explore" i]',
           'svg[aria-label*="Reels" i]',
-          'svg[aria-label*="Clips" i]',
-          'svg[aria-label*="Messenger" i]',
-          'svg[aria-label*="Direct" i]',
-          'svg[aria-label*="Profile" i]',
-          'a[href="/"]',
-          'a[href="/?variant=home"]',
-          'a[href*="/explore/"]',
-          'a[href*="/reels/"]',
-          'a[href*="/direct/inbox/"]'
+          'svg[aria-label*="Clips" i]'
         ].join(', '));
 
         for (var h = 0; h < bottomIcons.length; h++) {
           var icon = bottomIcons[h];
           var iconR = icon.getBoundingClientRect();
-          if (iconR.bottom >= winH - 80 && iconR.top > 120) {
+          // If nav icon is located in the bottom 140px of screen and not in top header
+          if (iconR.bottom >= winH - 120 && iconR.top > 100) {
             var curr = icon.parentElement;
-            while (curr && curr !== document.body && curr !== document.documentElement && curr.tagName !== 'MAIN' && curr.id !== 'react-root') {
+            while (curr && curr !== document.body && curr !== document.documentElement && curr.tagName !== 'MAIN' && curr.tagName !== 'SECTION' && curr.id !== 'react-root') {
               if (curr.querySelector && curr.querySelector('textarea, input, [contenteditable="true"], form')) break;
               var cSt = window.getComputedStyle(curr);
               var cR = curr.getBoundingClientRect();
-              if ((cSt.position === 'fixed' || cSt.position === 'sticky' || cSt.position === 'absolute' || curr.tagName === 'NAV' || curr.tagName === 'FOOTER' || curr.getAttribute('role') === 'navigation') && cR.bottom >= winH - 80) {
+              var isContainer = cSt.position === 'fixed' || cSt.position === 'sticky' || curr.tagName === 'NAV' || curr.getAttribute('role') === 'navigation' || (cR.height > 0 && cR.height < 100);
+              if (isContainer && (cR.bottom >= winH - 80 || cR.top >= winH - 120)) {
                 destroyElement(curr);
                 break;
               }
@@ -604,29 +631,37 @@ const getInjectedJS = (isDark) => `
       } catch(e) {}
     }
 
-    // Run immediately and continuously via requestAnimationFrame and a 50ms interval loop
-    eradicateInstagramBottomBar();
-    setInterval(eradicateInstagramBottomBar, 50);
-
-    var rafLoop = function() {
-      eradicateInstagramBottomBar();
-      requestAnimationFrame(rafLoop);
-    };
-    try {
-      requestAnimationFrame(rafLoop);
-    } catch(e) {}
-
-    // Intercept Shadow DOM and Dynamic React Nodes via MutationObserver on document.documentElement
-    try {
-      var navObserver = new MutationObserver(function() {
+    // Run safely when DOM is ready to avoid breaking React mounting
+    onDOMReady(function() {
+      try {
         eradicateInstagramBottomBar();
-      });
-      navObserver.observe(document.documentElement || document.body, {
-        childList: true,
-        subtree: true,
-        attributes: true
-      });
-    } catch(e) {}
+        setInterval(function() {
+          try { eradicateInstagramBottomBar(); } catch(e) {}
+        }, 50);
+
+        var rafLoop = function() {
+          try { eradicateInstagramBottomBar(); } catch(e) {}
+          try { requestAnimationFrame(rafLoop); } catch(e) {}
+        };
+        try { requestAnimationFrame(rafLoop); } catch(e) {}
+
+        // Intercept Shadow DOM and Dynamic React Nodes via MutationObserver
+        var rootElem = document.documentElement || document.body;
+        if (rootElem && window.MutationObserver) {
+          var navObserver = new MutationObserver(function() {
+            try {
+              eradicateInstagramBottomBar();
+              purgeAppPrompts();
+            } catch(e) {}
+          });
+          navObserver.observe(rootElem, {
+            childList: true,
+            subtree: true,
+            attributes: true
+          });
+        }
+      } catch(e) {}
+    });
 
     // 5. Active banner purger: Permanently removes all "Use the app", "Open the App" & App Store prompts
     function purgeAppPrompts() {
@@ -638,6 +673,8 @@ const getInjectedJS = (isDark) => `
 
       // Query selector targeting class names, attributes, and deep links
       var bannerSelectors = [
+        'div:has(> a[href*="instagram://"])',
+        'a[href*="app.link"]',
         '.smartbanner',
         '[class*="smartbanner" i]',
         '[class*="smart-banner" i]',
@@ -678,39 +715,60 @@ const getInjectedJS = (isDark) => `
         }
       } catch(e) {}
 
-      // Text scan for button/span labels
-      var allBanners = document.querySelectorAll('a, button, span, div, p');
-      var forbiddenTexts = [
-        'use the app',
-        'open the app',
-        'open in app',
-        'get the app',
-        'install the app',
-        'install app',
-        'download instagram',
-        'get instagram'
-      ];
-
-      for (var i = 0; i < allBanners.length; i++) {
-        var el = allBanners[i];
+      // Universal text scan for banner prompts: "Use the app", "Open app", "Get app", "Open in app"
+      var candidateNodes = document.querySelectorAll('a, button, [role="button"], span, p, div');
+      for (var i = 0; i < candidateNodes.length; i++) {
+        var el = candidateNodes[i];
+        // Only inspect leaf or small container nodes to prevent inspecting entire document
+        if (el.children && el.children.length > 3) continue;
         var text = (el.textContent || '').trim().toLowerCase();
-        if (forbiddenTexts.indexOf(text) !== -1) {
-          var box = el.closest('div[style*="fixed"], div[style*="sticky"], div[role="banner"]') || el.parentElement;
-          if (box && box !== document.body && box !== document.documentElement && box.tagName !== 'MAIN') {
-            if (box.querySelector && box.querySelector('textarea, input, [contenteditable="true"], form')) continue;
-            box.style.setProperty('display', 'none', 'important');
-            box.style.setProperty('visibility', 'hidden', 'important');
-            box.style.setProperty('opacity', '0', 'important');
-            box.style.setProperty('pointer-events', 'none', 'important');
-            box.style.setProperty('height', '0px', 'important');
-            box.style.setProperty('max-height', '0px', 'important');
-            box.style.setProperty('overflow', 'hidden', 'important');
+        if (
+          text.length > 0 &&
+          text.length < 60 &&
+          (text.indexOf('use the app') !== -1 ||
+           text.indexOf('open in app') !== -1 ||
+           text.indexOf('open app') !== -1 ||
+           text.indexOf('get app') !== -1 ||
+           text.indexOf('install app') !== -1 ||
+           text.indexOf('download instagram') !== -1)
+        ) {
+          var targetContainer = el.closest('div[style*="fixed"], div[style*="sticky"], div[role="banner"], [role="dialog"], div, a, section') || el;
+          if (
+            targetContainer &&
+            targetContainer !== document.body &&
+            targetContainer !== document.documentElement &&
+            targetContainer.tagName !== 'MAIN' &&
+            targetContainer.id !== 'react-root'
+          ) {
+            // Guard: Never remove containers containing active inputs, form, or chat composers
+            if (targetContainer.querySelector && targetContainer.querySelector('textarea, input, [contenteditable="true"], form')) continue;
+            try {
+              targetContainer.style.setProperty('display', 'none', 'important');
+              targetContainer.style.setProperty('visibility', 'hidden', 'important');
+              targetContainer.style.setProperty('opacity', '0', 'important');
+              targetContainer.style.setProperty('pointer-events', 'none', 'important');
+              targetContainer.style.setProperty('height', '0px', 'important');
+              targetContainer.style.setProperty('max-height', '0px', 'important');
+              targetContainer.style.setProperty('position', 'absolute', 'important');
+              targetContainer.style.setProperty('top', '-9999px', 'important');
+              if (targetContainer.remove) {
+                targetContainer.remove();
+              } else if (targetContainer.parentNode) {
+                targetContainer.parentNode.removeChild(targetContainer);
+              }
+            } catch(e) {}
           }
         }
       }
     }
-    purgeAppPrompts();
-    setInterval(purgeAppPrompts, 600);
+    onDOMReady(function() {
+      try {
+        purgeAppPrompts();
+        setInterval(function() {
+          try { purgeAppPrompts(); } catch(e) {}
+        }, 50);
+      } catch(e) {}
+    });
 
     // Suppress deep-link click events to instagram:// or app store URLs
     document.addEventListener('click', function(e) {
@@ -1239,6 +1297,27 @@ function MainApp() {
   const isDark = systemColorScheme === 'dark';
 
   const tabIndexAnim = useRef(new Animated.Value(1)).current; // 'messages' is index 1
+  const [isLoading, setIsLoading] = useState(false);
+  const loadingFadeAnim = useRef(new Animated.Value(0)).current;
+
+  const showLoading = () => {
+    setIsLoading(true);
+    Animated.timing(loadingFadeAnim, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const hideLoading = () => {
+    Animated.timing(loadingFadeAnim, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setIsLoading(false);
+    });
+  };
 
   useEffect(() => {
     const targetIdx = TABS.findIndex((t) => t.id === activeTab);
@@ -1309,13 +1388,20 @@ function MainApp() {
         true;
       `);
     } else if (tab === 'profile') {
-      const targetUser = loggedInUser || 'nagumoo_001';
+      const fallbackUser = loggedInUser || '';
       webViewRef.current.injectJavaScript(`
         (function() {
           try { sessionStorage.removeItem('anchor_from_dm'); } catch(e) {}
-          var p = window.location.pathname || '';
-          if (p.indexOf('/${targetUser}') !== -1) return;
-          window.location.href = 'https://www.instagram.com/${targetUser}/';
+          var currentPath = (window.location.pathname || '').toLowerCase();
+          var detected = window.__ANCHOR_USER__ || '${fallbackUser}';
+          if (detected && currentPath.indexOf('/' + detected.toLowerCase()) !== -1) {
+            return;
+          }
+          if (detected) {
+            window.location.href = 'https://www.instagram.com/' + detected + '/';
+          } else {
+            window.location.href = 'https://www.instagram.com/accounts/edit/';
+          }
         })();
         true;
       `);
@@ -1406,8 +1492,9 @@ function MainApp() {
         cacheEnabled={true}
         sharedCookiesEnabled={true}
         thirdPartyCookiesEnabled={true}
-        originWhitelist={['*']}
+        originWhitelist={['https://*', 'http://*']}
         mixedContentMode="always"
+        androidHardwareAccelerationDisabled={false}
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
         scalesPageToFit={false}
@@ -1418,6 +1505,25 @@ function MainApp() {
         injectedJavaScriptBeforeContentLoaded={getInitJS(isDark)}
         injectedJavaScript={getInjectedJS(isDark)}
         onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
+        onLoadStart={() => {
+          showLoading();
+        }}
+        onError={(syntheticEvent) => {
+          const { nativeEvent } = syntheticEvent;
+          console.warn('WebView load error: ', nativeEvent);
+          hideLoading();
+          // Fall back gracefully by reloading if critical web failure occurred
+          if (nativeEvent && (nativeEvent.statusCode >= 500 || nativeEvent.statusCode === 404)) {
+            webViewRef.current?.reload();
+          }
+        }}
+        onHttpError={(syntheticEvent) => {
+          const { nativeEvent } = syntheticEvent;
+          console.warn('WebView HTTP error: ', nativeEvent);
+          if (nativeEvent && (nativeEvent.statusCode >= 500 || nativeEvent.statusCode === 404)) {
+            webViewRef.current?.reload();
+          }
+        }}
         onNavigationStateChange={(navState) => {
           if (navState.canGoBack !== canGoBack) {
             setCanGoBack(navState.canGoBack);
@@ -1444,7 +1550,13 @@ function MainApp() {
           }
           webViewRef.current?.injectJavaScript(getInjectedJS(isDark));
         }}
+        onLoadProgress={({ nativeEvent }) => {
+          if (nativeEvent.progress > 0.3) {
+            webViewRef.current?.injectJavaScript(getInjectedJS(isDark));
+          }
+        }}
         onLoadEnd={() => {
+          hideLoading();
           webViewRef.current?.injectJavaScript(getInjectedJS(isDark));
         }}
         onMessage={onMessage}
@@ -1456,20 +1568,38 @@ function MainApp() {
         )}
       />
 
-      {/* Modern Floating Glassmorphism Bottom Navigation Bar */}
+      {/* Floating Animated Loading Spinner Overlay during route changes */}
+      {isLoading && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.floatingLoadingBadge,
+            {
+              opacity: loadingFadeAnim,
+              backgroundColor: isDark ? 'rgba(28, 28, 30, 0.85)' : 'rgba(255, 255, 255, 0.85)',
+              borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)',
+            },
+          ]}
+        >
+          <ActivityIndicator size="small" color={isDark ? '#FFFFFF' : '#000000'} />
+        </Animated.View>
+      )}
+
+      {/* Pinned Fixed Full-Width Bottom Navigation Bar */}
       {!isInChatThread && (
-        <View style={styles.floatingNavWrapper} pointerEvents="box-none">
+        <View style={styles.fixedNavWrapper} pointerEvents="box-none">
           <View
             onLayout={(e) => setNavBarWidth(e.nativeEvent.layout.width)}
             style={[
               styles.glassmorphicNavBar,
               {
-                backgroundColor: isDark ? 'rgba(18, 18, 18, 0.75)' : 'rgba(255, 255, 255, 0.85)',
-                borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.1)',
+                backgroundColor: '#000000',
+                borderTopColor: 'rgba(255, 255, 255, 0.1)',
+                paddingBottom: 6 + insets.bottom,
               },
             ]}
           >
-            {/* Smooth animated active pill indicator */}
+            {/* Smooth animated active frosted glass pill indicator */}
             {navBarWidth > 0 && (
               <Animated.View
                 pointerEvents="none"
@@ -1477,6 +1607,7 @@ function MainApp() {
                   styles.activePillIndicator,
                   {
                     width: (navBarWidth - 16) / TABS.length,
+                    bottom: 6 + insets.bottom,
                     left: tabIndexAnim.interpolate({
                       inputRange: [0, 1, 2, 3],
                       outputRange: [
@@ -1486,23 +1617,32 @@ function MainApp() {
                         8 + ((navBarWidth - 16) / 4) * 3,
                       ],
                     }),
-                    backgroundColor: isDark
-                      ? 'rgba(255, 255, 255, 0.16)'
-                      : 'rgba(0, 0, 0, 0.08)',
-                    borderColor: isDark
-                      ? 'rgba(255, 255, 255, 0.18)'
-                      : 'rgba(0, 0, 0, 0.06)',
+                    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                    borderColor: 'rgba(255, 255, 255, 0.25)',
                   },
                 ]}
               />
             )}
 
-            {TABS.map((tab) => {
+            {TABS.map((tab, idx) => {
               const isActive = activeTab === tab.id;
               const TabIcon = tab.Icon;
-              const activeTextColor = isDark ? '#FFFFFF' : '#000000';
-              const inactiveTextColor = isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.5)';
-              const iconColor = isActive ? activeTextColor : inactiveTextColor;
+              const activeTextColor = '#FFFFFF';
+              const inactiveTextColor = 'rgba(255, 255, 255, 0.5)';
+              const iconColor = isActive ? '#FFFFFF' : inactiveTextColor;
+
+              // Smooth interpolated scale and opacity based on active tab indicator
+              const tabScale = tabIndexAnim.interpolate({
+                inputRange: [idx - 1, idx, idx + 1],
+                outputRange: [1, 1.05, 1],
+                extrapolate: 'clamp',
+              });
+
+              const tabOpacity = tabIndexAnim.interpolate({
+                inputRange: [idx - 1, idx, idx + 1],
+                outputRange: [0.5, 1, 0.5],
+                extrapolate: 'clamp',
+              });
 
               return (
                 <TouchableOpacity
@@ -1511,20 +1651,29 @@ function MainApp() {
                   activeOpacity={0.7}
                   style={styles.tabItem}
                 >
-                  <View style={styles.iconWrapper}>
-                    <TabIcon active={isActive} color={iconColor} />
-                  </View>
-                  <Text
-                    style={[
-                      styles.tabLabel,
-                      {
-                        color: iconColor,
-                        fontWeight: isActive ? '700' : '500',
-                      },
-                    ]}
+                  <Animated.View
+                    style={{
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transform: [{ scale: tabScale }],
+                      opacity: tabOpacity,
+                    }}
                   >
-                    {tab.label}
-                  </Text>
+                    <View style={styles.iconWrapper}>
+                      <TabIcon active={isActive} color={iconColor} />
+                    </View>
+                    <Text
+                      style={[
+                        styles.tabLabel,
+                        {
+                          color: isActive ? '#FFFFFF' : 'rgba(255, 255, 255, 0.5)',
+                          fontWeight: isActive ? '700' : '500',
+                        },
+                      ]}
+                    >
+                      {tab.label}
+                    </Text>
+                  </Animated.View>
                 </TouchableOpacity>
               );
             })}
@@ -1628,12 +1777,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 99,
   },
-  floatingNavWrapper: {
+  fixedNavWrapper: {
     position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    alignItems: 'center',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    width: '100%',
     zIndex: 9999999,
   },
   glassmorphicNavBar: {
@@ -1642,21 +1791,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
-    borderRadius: 30,
-    borderWidth: 1,
-    paddingVertical: 6,
+    borderTopWidth: 1,
+    paddingTop: 8,
     paddingHorizontal: 8,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.37,
-    shadowRadius: 32,
-    elevation: 12,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 20,
   },
   activePillIndicator: {
     position: 'absolute',
     top: 6,
     bottom: 6,
-    borderRadius: 22,
+    borderRadius: 24,
     borderWidth: 1,
     zIndex: 1,
   },
@@ -1678,5 +1826,20 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 2,
     letterSpacing: -0.1,
+  },
+  floatingLoadingBadge: {
+    position: 'absolute',
+    top: 56,
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    zIndex: 999,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 8,
   },
 });
